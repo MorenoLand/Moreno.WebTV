@@ -1,0 +1,21 @@
+# Build outputs
+*.exe
+*.test
+*.out
+
+# Emulator inputs / private firmware
+roms/
+*.img
+*.brom
+*.iic
+
+# Runtime/debug artifacts
+debug_*.bin
+fb.raw
+preview_*.png
+
+# Local/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
