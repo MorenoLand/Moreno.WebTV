@@ -76,7 +76,8 @@ func main() {
 		lastResolverKey := ""
 		bus.Tracking = true
 		modemScriptEmptied := false
-		for step := 0; step < 205_000_000; step++ {
+		schedUnblocked := false
+		for step := 0; step < 120_000_000; step++ {
 			if step > 0 && step%100_000_000 == 0 {
 				head := binary.BigEndian.Uint32(bus.RAM[0x18F0:])
 				glob := binary.BigEndian.Uint32(bus.RAM[0x1900:])
@@ -98,6 +99,21 @@ func main() {
 						bus.RAM[base+i] = 0
 					}
 					fmt.Printf("modem script emptied step=%d ptr=0x%08X PC=0x%08X\n", step, ptr, cpu.PC)
+				}
+			}
+			if modemScriptEmptied && !schedUnblocked && step > 60_000_000 {
+				head := binary.BigEndian.Uint32(bus.RAM[0x18F0:])
+				glob := binary.BigEndian.Uint32(bus.RAM[0x1900:])
+				hp := head & 0x1FFFFFFF
+				gp := glob & 0x1FFFFFFF
+				if hp+0x13 < uint32(len(bus.RAM)) && gp+0x13 < uint32(len(bus.RAM)) {
+					headTick := binary.BigEndian.Uint32(bus.RAM[hp+0x10:])
+					globTick := binary.BigEndian.Uint32(bus.RAM[gp+0x10:])
+					if headTick != 0 && globTick != 0 && headTick < globTick {
+						binary.BigEndian.PutUint32(bus.RAM[hp+0x10:], globTick)
+						schedUnblocked = true
+						fmt.Printf("scheduler head tick raised step=%d head=0x%08X %d->%d glob=0x%08X PC=0x%08X\n", step, head, headTick, globTick, glob, cpu.PC)
+					}
 				}
 			}
 			p := cpu.PC & 0x1FFFFFFF
@@ -380,6 +396,7 @@ func main() {
 		dumpRAMRange(bus, 0x00001400, 0x500, "debug_irq_table.bin")
 		dumpRAMRange(bus, 0x00212400, 0x300, "debug_80212400.bin")
 		dumpRAMRange(bus, 0x00222200, 0x400, "debug_80222200.bin")
+		dumpRAMRange(bus, 0x00221800, 0x500, "debug_80221800.bin")
 		if cpu.PC >= 0x80209000 && cpu.PC < 0x80209400 {
 			dumpRAMRange(bus, 0x00209200, 0x100, "debug_80209200.bin")
 			dumpRAMRange(bus, 0x00209300, 0x100, "debug_80209300.bin")

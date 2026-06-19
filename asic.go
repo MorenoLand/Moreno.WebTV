@@ -99,7 +99,7 @@ const (
 
 const rioPollPeriodCycles = 200000
 const sysTimerPeriodCycles = 2783333
-const sysTimerStartCycles = 150000000
+const sysTimerStartCycles = 0xFFFFFFFFFFFFFFFF
 
 func NewSoloASIC() *SoloASIC {
 	a := &SoloASIC{
