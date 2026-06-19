@@ -4,7 +4,8 @@
 *.out
 
 # Emulator inputs / private firmware
-roms/
+roms/*
+!roms/README.md
 *.img
 *.brom
 *.iic
