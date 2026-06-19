@@ -11,6 +11,10 @@ import (
 
 const bootROMPath = "roms/bootrom.brom"
 
+const forceEmptyModemScript = false
+const forceSchedulerHeadReady = false
+const forceBypassModemReadyWait = false
+
 func main() {
 	bus := NewBus()
 	if err := bus.Asic.LoadNVRAM("roms/ptnvram.iic"); err != nil {
@@ -73,11 +77,13 @@ func main() {
 		lateLoopReports := 0
 		parserChars := 0
 		parserFallbacks := 0
+		parserErrors := 0
 		lastResolverKey := ""
 		bus.Tracking = true
 		modemScriptEmptied := false
+		modemReadyWaitPatched := false
 		schedUnblocked := false
-		for step := 0; step < 120_000_000; step++ {
+		for step := 0; step < 1_000_000_000; step++ {
 			if step > 0 && step%100_000_000 == 0 {
 				head := binary.BigEndian.Uint32(bus.RAM[0x18F0:])
 				glob := binary.BigEndian.Uint32(bus.RAM[0x1900:])
@@ -90,7 +96,7 @@ func main() {
 				}
 				fmt.Printf("[%dM] PC=0x%08X Status=0x%08X schedHead=0x%08X headTick=%d schedGlob=0x%08X globTick=%d\n", step/1_000_000, cpu.PC, cpu.COP0[Status], head, headTick, glob, globTick)
 			}
-			if !modemScriptEmptied {
+			if forceEmptyModemScript && !modemScriptEmptied {
 				ptr := binary.BigEndian.Uint32(bus.RAM[0x1C90:])
 				if ptr >= 0x800F4C80 && ptr < 0x800F5500 {
 					modemScriptEmptied = true
@@ -101,7 +107,15 @@ func main() {
 					fmt.Printf("modem script emptied step=%d ptr=0x%08X PC=0x%08X\n", step, ptr, cpu.PC)
 				}
 			}
-			if modemScriptEmptied && !schedUnblocked && step > 60_000_000 {
+			if forceBypassModemReadyWait && !modemReadyWaitPatched {
+				const waitCond = uint32(0x000F50C6)
+				if string(bus.RAM[waitCond:waitCond+12]) == "w(Idone\x00<C2\x00" {
+					bus.RAM[waitCond+10] = '0'
+					modemReadyWaitPatched = true
+					fmt.Printf("modem ready wait patched step=%d addr=0x%08X PC=0x%08X\n", step, waitCond+10, cpu.PC)
+				}
+			}
+			if forceSchedulerHeadReady && modemScriptEmptied && !schedUnblocked && step > 60_000_000 {
 				head := binary.BigEndian.Uint32(bus.RAM[0x18F0:])
 				glob := binary.BigEndian.Uint32(bus.RAM[0x1900:])
 				hp := head & 0x1FFFFFFF
@@ -226,6 +240,12 @@ func main() {
 				ptr := binary.BigEndian.Uint32(bus.RAM[0x1C90:])
 				fmt.Printf("parser fallback %d step=%d v0=0x%02X ptr=0x%08X around=%q s0=0x%016X ra=0x%016X\n",
 					parserFallbacks, step, byte(cpu.Regs[2]), ptr, previewRAMString(bus, (ptr-16)&0x1FFFFFFF, 96), cpu.Regs[16], cpu.Regs[31])
+			}
+			if (cpu.PC == 0x8024B900 || cpu.PC == 0x8024B9D8) && parserErrors < 64 {
+				parserErrors++
+				ptr := binary.BigEndian.Uint32(bus.RAM[0x1C90:])
+				fmt.Printf("parser error call %02d step=%d PC=0x%08X code/a0=0x%016X val/a1=0x%016X ptr=0x%08X around=%q ra=0x%016X\n",
+					parserErrors, step, cpu.PC, cpu.Regs[4], cpu.Regs[5], ptr, previewRAMString(bus, (ptr-24)&0x1FFFFFFF, 120), cpu.Regs[31])
 			}
 			if (cpu.PC == 0x9FC03040 || cpu.PC == 0xBFC03040) && cpu.Regs[5] >= 0x80200000 && cpu.Regs[5] < 0x80210000 && copyEntryHits < 8 {
 				copyEntryHits++

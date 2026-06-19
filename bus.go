@@ -23,6 +23,8 @@ type Bus struct {
 	AsicReadCnt [0x10000]uint64
 	Tracking    bool
 	PollCnt     map[uint32]uint64
+	RIOReadCnt  uint64
+	RIOWriteCnt uint64
 }
 
 func NewBus() *Bus {
@@ -118,7 +120,16 @@ func (b *Bus) Read32(addr uint32) uint32 {
 		if b.Tracking {
 			b.AsicReadCnt[p&0xFFFF]++
 		}
-		return b.Asic.Read(p & 0xFFFF)
+		off := p & 0xFFFF
+		v := b.Asic.Read(off)
+		if off == 0x90A0 && b.CPU != nil {
+			b.RIOReadCnt++
+			if b.RIOReadCnt <= 32 || b.RIOReadCnt%100000 == 0 {
+				fmt.Printf("RIO read #%d step=%d PC=0x%08X execPC=0x%08X off=0x%04X val=0x%08X cycles=0x%016X readyAt=0x%016X ptr=0x%08X\n",
+					b.RIOReadCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, off, v, b.Asic.Cycles, b.Asic.RIOPollReadyAt, binary.BigEndian.Uint32(b.RAM[0x1C90:]))
+			}
+		}
+		return v
 	}
 	if p >= 0x1E400000 && p <= 0x1E80001F {
 		return b.IDE.Read32(p - 0x1E400000)
@@ -147,6 +158,13 @@ func (b *Bus) Write8(addr, val uint32) {
 		return
 	}
 	if p >= 0x04000000 && p < 0x05000000 {
+		if (p&0xFFFF) == 0x90A8 && b.CPU != nil {
+			b.RIOWriteCnt++
+			if b.RIOWriteCnt <= 64 || b.RIOWriteCnt%1000 == 0 {
+				fmt.Printf("RIO write8 #%d step=%d PC=0x%08X execPC=0x%08X off=0x%04X val=0x%02X cycles=0x%016X ptr=0x%08X\n",
+					b.RIOWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, p&0xFFFF, val&0xFF, b.Asic.Cycles, binary.BigEndian.Uint32(b.RAM[0x1C90:]))
+			}
+		}
 		b.Asic.Write(p&0xFFFF, val)
 		return
 	}
@@ -163,6 +181,13 @@ func (b *Bus) Write16(addr, val uint32) {
 		return
 	}
 	if p >= 0x04000000 && p < 0x05000000 {
+		if (p&0xFFFF) == 0x90A8 && b.CPU != nil {
+			b.RIOWriteCnt++
+			if b.RIOWriteCnt <= 64 || b.RIOWriteCnt%1000 == 0 {
+				fmt.Printf("RIO write16 #%d step=%d PC=0x%08X execPC=0x%08X off=0x%04X val=0x%04X cycles=0x%016X ptr=0x%08X\n",
+					b.RIOWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, p&0xFFFF, val&0xFFFF, b.Asic.Cycles, binary.BigEndian.Uint32(b.RAM[0x1C90:]))
+			}
+		}
 		b.Asic.Write(p&0xFFFF, val)
 		return
 	}
@@ -191,6 +216,13 @@ func (b *Bus) Write32(addr, val uint32) {
 		return
 	}
 	if p >= 0x04000000 && p < 0x05000000 {
+		if (p&0xFFFF) == 0x90A8 && b.CPU != nil {
+			b.RIOWriteCnt++
+			if b.RIOWriteCnt <= 64 || b.RIOWriteCnt%1000 == 0 {
+				fmt.Printf("RIO write32 #%d step=%d PC=0x%08X execPC=0x%08X off=0x%04X val=0x%08X cycles=0x%016X ptr=0x%08X\n",
+					b.RIOWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, p&0xFFFF, val, b.Asic.Cycles, binary.BigEndian.Uint32(b.RAM[0x1C90:]))
+			}
+		}
 		b.Asic.Write(p&0xFFFF, val)
 		return
 	}
