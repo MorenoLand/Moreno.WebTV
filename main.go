@@ -397,6 +397,8 @@ func main() {
 		dumpRAMRange(bus, 0x00212400, 0x300, "debug_80212400.bin")
 		dumpRAMRange(bus, 0x00222200, 0x400, "debug_80222200.bin")
 		dumpRAMRange(bus, 0x00221800, 0x500, "debug_80221800.bin")
+		dumpRAMRange(bus, 0x00223600, 0x400, "debug_80223600.bin")
+		dumpRAMRange(bus, 0x00000400, 0x400, "debug_lowram_0400.bin")
 		if cpu.PC >= 0x80209000 && cpu.PC < 0x80209400 {
 			dumpRAMRange(bus, 0x00209200, 0x100, "debug_80209200.bin")
 			dumpRAMRange(bus, 0x00209300, 0x100, "debug_80209300.bin")
