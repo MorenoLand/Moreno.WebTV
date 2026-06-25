@@ -12,6 +12,7 @@ roms/*
 
 # Runtime/debug artifacts
 debug_*.bin
+debug_*.png
 fb.raw
 preview_*.png
 

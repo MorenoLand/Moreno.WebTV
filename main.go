@@ -484,7 +484,7 @@ func main() {
 				if !bootGateCodeDumped {
 					bootGateCodeDumped = true
 					printCodeRange(bus, 0x802C7380, 0x802C7460, "boot gate")
-					printCodeRange(bus, 0x802B40D0, 0x802B41E0, "boot gate callee")
+					printCodeRange(bus, 0x802B3F80, 0x802B42A0, "boot gate callee")
 				}
 			}
 			if cpu.PC >= 0x802B40F0 && cpu.PC < 0x802B4140 && bootListHits < 160 {
