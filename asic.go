@@ -324,6 +324,9 @@ func (a *SoloASIC) Write(off, data uint32) {
 		a.DevIntStat |= data
 	case 0x0174:
 		a.DevIntStat &^= data
+		if a.DevIntStat&a.DevIntEnable == 0 {
+			a.BusIntStat &^= BUS_INT_DEVICE
+		}
 	case 0x0088:
 		a.VIDIntEnable |= data
 	case 0x0188:
@@ -543,6 +546,7 @@ const (
 	BUS_INT_TIM_SYSTIMER = 1 << 2 // Timer system timer
 	BUS_INT_TIM_BUSTOUT  = 1 << 2 // Bus timeout / watchdog
 	BUS_INT_RIO          = 1 << 5
+	BUS_INT_DEVICE       = 1 << 6
 	BUS_INT_VIDEO        = 1 << 7
 )
 
@@ -562,6 +566,9 @@ func (a *SoloASIC) PendingIP2() bool {
 func (a *SoloASIC) assertBusIRQ() {
 	if a.RIOIntStat != 0 {
 		a.BusIntStat |= BUS_INT_RIO
+	}
+	if a.DevIntStat != 0 {
+		a.BusIntStat |= BUS_INT_DEVICE
 	}
 }
 

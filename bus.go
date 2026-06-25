@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 )
 
 const (
@@ -28,6 +29,7 @@ type Bus struct {
 	ModemReadCnt  uint64
 	ModemWriteCnt uint64
 	ModemRX       []byte
+	ModemTXLine   []byte
 	ModemStage    int
 	ModemStageAt  uint64
 }
@@ -164,7 +166,7 @@ func (b *Bus) Read32(addr uint32) uint32 {
 func (b *Bus) Write8(addr, val uint32) {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 1); ok {
-		if ((rp >= 0x330 && rp <= 0x337) || (rp >= 0x288 && rp <= 0x28B) || (rp >= 0x101C && rp <= 0x101F) || (rp >= 0x1904 && rp <= 0x1909) || rp == 0x1E74) && b.CPU != nil {
+		if ((rp >= 0x330 && rp <= 0x337) || (rp >= 0x288 && rp <= 0x28B) || (rp >= 0x101C && rp <= 0x101F) || (rp >= 0x1904 && rp <= 0x1909) || (rp >= 0x1CF0 && rp <= 0x1CF7) || (rp >= 0x2240 && rp <= 0x224E) || (rp >= 0x2730 && rp <= 0x2733) || rp == 0x1E74) && b.CPU != nil {
 			fmt.Printf("RAM watch8 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%02X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val&0xFF)
 		}
@@ -191,7 +193,7 @@ func (b *Bus) Write8(addr, val uint32) {
 func (b *Bus) Write16(addr, val uint32) {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 2); ok {
-		if ((rp <= 0x337 && rp+1 >= 0x330) || (rp <= 0x28B && rp+1 >= 0x288) || (rp <= 0x101F && rp+1 >= 0x101C) || (rp <= 0x1909 && rp+1 >= 0x1904) || (rp <= 0x1E74 && rp+1 >= 0x1E74)) && b.CPU != nil {
+		if ((rp <= 0x337 && rp+1 >= 0x330) || (rp <= 0x28B && rp+1 >= 0x288) || (rp <= 0x101F && rp+1 >= 0x101C) || (rp <= 0x1909 && rp+1 >= 0x1904) || (rp <= 0x1CF7 && rp+1 >= 0x1CF0) || (rp <= 0x224E && rp+1 >= 0x2240) || (rp <= 0x2733 && rp+1 >= 0x2730) || (rp <= 0x1E74 && rp+1 >= 0x1E74)) && b.CPU != nil {
 			fmt.Printf("RAM watch16 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%04X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val&0xFFFF)
 		}
@@ -226,7 +228,7 @@ func (b *Bus) Write32(addr, val uint32) {
 		return
 	}
 	if rp, ok := ramMirror(p, 4); ok {
-		if ((rp <= 0x337 && rp+3 >= 0x330) || (rp <= 0x28B && rp+3 >= 0x288) || (rp <= 0x101F && rp+3 >= 0x101C) || (rp <= 0x1907 && rp+3 >= 0x18F0) || (rp <= 0x1E74 && rp+3 >= 0x1E74) || (rp <= 0xEEDD0 && rp+3 >= 0xEEDA8) || (rp <= 0xF0B93 && rp+3 >= 0xF0B70)) && b.CPU != nil {
+		if ((rp <= 0x337 && rp+3 >= 0x330) || (rp <= 0x28B && rp+3 >= 0x288) || (rp <= 0x101F && rp+3 >= 0x101C) || (rp <= 0x1907 && rp+3 >= 0x18F0) || (rp <= 0x1CF7 && rp+3 >= 0x1CF0) || (rp <= 0x224E && rp+3 >= 0x2240) || (rp <= 0x2733 && rp+3 >= 0x2730) || (rp <= 0x1E74 && rp+3 >= 0x1E74) || (rp <= 0xEEDD0 && rp+3 >= 0xEEDA8) || (rp <= 0xF0B93 && rp+3 >= 0xF0B70)) && b.CPU != nil {
 			fmt.Printf("RAM watch32 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%08X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val)
 			if rp <= 0x101F && rp+3 >= 0x101C {
@@ -256,15 +258,14 @@ func (b *Bus) Write32(addr, val uint32) {
 
 func (b *Bus) modemRead8(off uint32) uint8 {
 	b.ModemReadCnt++
-	if b.CPU != nil && (b.ModemReadCnt <= 128 || b.ModemReadCnt%1000000 == 0) {
-		fmt.Printf("modem read #%d step=%d PC=0x%08X execPC=0x%08X off=0x%02X\n", b.ModemReadCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, off)
-	}
+	var v uint8
 	switch off {
 	case 0x00:
 		if len(b.ModemRX) == 0 {
-			return 0
+			v = 0
+			break
 		}
-		v := b.ModemRX[0]
+		v = b.ModemRX[0]
 		b.ModemRX = b.ModemRX[1:]
 		if len(b.ModemRX) == 0 && b.ModemStage == 1 {
 			b.ModemStage = 2
@@ -279,18 +280,23 @@ func (b *Bus) modemRead8(off uint32) uint8 {
 				fmt.Printf("modem stage 2 consumed step=%d writes=%d reads=%d\n", b.CPU.Steps, b.ModemWriteCnt, b.ModemReadCnt)
 			}
 		}
-		return v
 	case 0x14:
-		if b.CPU != nil && b.CPU.PC >= 0x8024CB50 && b.CPU.PC < 0x8024CC00 {
-			return 0x20
-		}
 		if len(b.ModemRX) != 0 {
-			return 0x21
+			v = 0x21
+			break
 		}
-		return 0x20
+		v = 0x20
+	case 0x18:
+		if len(b.ModemRX) != 0 {
+			v = 1
+		}
 	default:
-		return 0
+		v = 0
 	}
+	if b.CPU != nil && (b.ModemReadCnt <= 128 || b.ModemStage >= 3 || b.ModemReadCnt%1000000 == 0) {
+		fmt.Printf("modem read #%d step=%d PC=0x%08X execPC=0x%08X off=0x%02X val=0x%02X\n", b.ModemReadCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, off, v)
+	}
+	return v
 }
 
 func (b *Bus) modemWrite(off, val, width uint32) {
@@ -298,23 +304,36 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 	if b.CPU != nil && (b.ModemWriteCnt <= 128 || b.ModemWriteCnt%1000000 == 0) {
 		fmt.Printf("modem write #%d step=%d PC=0x%08X execPC=0x%08X off=0x%02X width=%d val=0x%X\n", b.ModemWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, off, width, val)
 	}
-	if off == 0 && byte(val) == '\r' {
-		b.ModemRX = append(b.ModemRX, '\n', '\n')
-	}
-	if off == 0 && b.ModemStage == 0 && b.ModemWriteCnt > 64 {
-		b.ModemRX = append(b.ModemRX, []byte("Download Modem Firmware ..")...)
-		b.ModemStage = 1
-		if b.CPU != nil {
-			fmt.Printf("modem stage 1 queued step=%d writes=%d\n", b.CPU.Steps, b.ModemWriteCnt)
+	if off == 0 {
+		ch := byte(val)
+		if ch != '\r' && ch != '\n' {
+			b.ModemTXLine = append(b.ModemTXLine, ch)
+		}
+		if ch == '\r' || ch == '\n' {
+			line := string(b.ModemTXLine)
+			if b.ModemStage == 0 && strings.Contains(line, "AT**") {
+				b.queueModemRX([]byte("\n\nDownload Modem Firmware .."))
+				b.ModemStage = 1
+				if b.CPU != nil {
+					fmt.Printf("modem stage 1 queued step=%d writes=%d line=%q\n", b.CPU.Steps, b.ModemWriteCnt, line)
+				}
+			}
+			if b.ModemStage >= 1 && b.ModemStage < 3 && strings.HasPrefix(line, "S705") {
+				b.queueModemRX([]byte("."))
+				b.ModemStage = 3
+				if b.CPU != nil {
+					fmt.Printf("modem stage 2 queued step=%d writes=%d line=%q\n", b.CPU.Steps, b.ModemWriteCnt, line)
+				}
+			}
+			b.ModemTXLine = b.ModemTXLine[:0]
 		}
 	}
-	if off == 0 && b.ModemStage == 2 && b.ModemWriteCnt > b.ModemStageAt+64 {
-		b.ModemRX = append(b.ModemRX, []byte("Modem Firmware Successfully Loaded")...)
-		b.ModemStage = 3
-		if b.CPU != nil {
-			fmt.Printf("modem stage 2 queued step=%d writes=%d\n", b.CPU.Steps, b.ModemWriteCnt)
-		}
-	}
+}
+
+func (b *Bus) queueModemRX(data []byte) {
+	b.ModemRX = append(b.ModemRX, data...)
+	b.Asic.DevIntStat |= 1
+	b.Asic.BusIntStat |= BUS_INT_DEVICE
 }
 
 func (b *Bus) PrintTopPollAddrs(n int) {
