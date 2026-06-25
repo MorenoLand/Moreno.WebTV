@@ -526,14 +526,14 @@ func (a *SoloASIC) Tick(cycles uint64) {
 			a.SysTimerNext = a.Cycles + sysTimerPeriodCycles
 		}
 		if a.Cycles >= a.SysTimerNext {
-			a.TimIntStat |= 1 << 3 // BUS_INT_TIM_SYSTIMER
-			a.BusIntStat |= 1 << 3 // BUS_INT_TIMER
+			a.TimIntStat |= BUS_INT_TIM_SYSTIMER
+			a.BusIntStat |= BUS_INT_TIMER
 		}
 	}
 	if a.TimerCompare != 0 && a.Cycles>>1 >= uint64(a.TimerCompare) {
-		a.TimIntStat |= 1 << 3 // BUS_INT_TIM_SYSTIMER
+		a.TimIntStat |= BUS_INT_TIM_SYSTIMER
 		if a.BusIntEnable&(1<<3) != 0 {
-			a.BusIntStat |= 1 << 3 // BUS_INT_TIMER
+			a.BusIntStat |= BUS_INT_TIMER
 		}
 	}
 }
@@ -569,7 +569,7 @@ func (a *SoloASIC) UpdateTimerInterrupt(cpuCount, cpuCompare uint32) {
 	// SOLO timer: when BUS_TCOUNT matches TCOMPARE, fire TimIntStat bit
 	tcount := uint32(a.Cycles >> 1)
 	if a.TimerCompare != 0 && tcount >= a.TimerCompare {
-		a.TimIntStat |= 0x01
+		a.TimIntStat |= BUS_INT_TIM_SYSTIMER
 	}
 }
 

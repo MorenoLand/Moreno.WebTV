@@ -754,6 +754,8 @@ func (c *CPU) execCOP0(rs, rt, rd, inst uint32) {
 			c.COP0[Status] &^= 0x02
 			c.PC = pc
 			return
+		case 0x20: // WAIT
+			c.waitForInterrupt()
 		default:
 		}
 	case 0x18: // CO — ERET or TLB ops
@@ -765,6 +767,52 @@ func (c *CPU) execCOP0(rs, rt, rd, inst uint32) {
 			return
 		default:
 		}
+	}
+}
+
+func (c *CPU) waitForInterrupt() {
+	cycles := uint64(0)
+	if c.COP0[Compare] != 0 && c.COP0[Count] < c.COP0[Compare] {
+		cycles = uint64(c.COP0[Compare]-c.COP0[Count]) * 2
+	}
+	if a := c.Bus.Asic; a != nil {
+		if a.TimerCompare != 0 {
+			target := uint64(a.TimerCompare) * 2
+			if a.Cycles < target {
+				delta := target - a.Cycles
+				if cycles == 0 || delta < cycles {
+					cycles = delta
+				}
+			}
+		}
+		if a.TimIntEnable&(1<<2) != 0 {
+			target := a.SysTimerNext
+			if target == 0 && a.Cycles >= sysTimerStartCycles {
+				target = a.Cycles + sysTimerPeriodCycles
+			}
+			if target != 0 && a.Cycles < target {
+				delta := target - a.Cycles
+				if cycles == 0 || delta < cycles {
+					cycles = delta
+				}
+			}
+		}
+	}
+	if cycles != 0 {
+		oldSteps := c.Steps
+		c.Steps += cycles
+		if oldSteps&1 != 0 {
+			c.COP0[Count] += uint32((cycles + 1) / 2)
+		} else {
+			c.COP0[Count] += uint32(cycles / 2)
+		}
+		c.Bus.Asic.Tick(cycles)
+	}
+	if c.COP0[Compare] != 0 && c.COP0[Count] >= c.COP0[Compare] {
+		c.COP0[Cause] |= 0x8000
+	}
+	if c.Bus.Asic.PendingIP2() {
+		c.COP0[Cause] |= 0x0400
 	}
 }
 

@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"sort"
@@ -78,12 +81,27 @@ func main() {
 		parserChars := 0
 		parserFallbacks := 0
 		parserErrors := 0
+		printfHits := 0
+		nativeLookupHits := 0
+		nativeResolveHits := 0
+		modemNativeHits := 0
+		modemDelayLoopHits := 0
+		interruptHelperHits := 0
+		idleBlockHits := 0
+		schedulerDispatchHits := 0
+		currentTaskHits := 0
+		currentTaskTraceHits := 0
+		currentWaitHits := 0
+		bootGateHits := 0
+		schedulerCodeDumped := false
+		irqLoopHits := 0
+		irqCodeDumped := false
 		lastResolverKey := ""
 		bus.Tracking = true
 		modemScriptEmptied := false
 		modemReadyWaitPatched := false
 		schedUnblocked := false
-		for step := 0; step < 1_000_000_000; step++ {
+		for step := 0; step < 500_000_000; step++ {
 			if step > 0 && step%100_000_000 == 0 {
 				head := binary.BigEndian.Uint32(bus.RAM[0x18F0:])
 				glob := binary.BigEndian.Uint32(bus.RAM[0x1900:])
@@ -95,6 +113,11 @@ func main() {
 					globTick = binary.BigEndian.Uint32(bus.RAM[gp+0x10:])
 				}
 				fmt.Printf("[%dM] PC=0x%08X Status=0x%08X schedHead=0x%08X headTick=%d schedGlob=0x%08X globTick=%d\n", step/1_000_000, cpu.PC, cpu.COP0[Status], head, headTick, glob, globTick)
+				if step <= 200_000_000 {
+					printSchedulerNode(bus, head, "head")
+					printSchedulerNode(bus, glob, "glob")
+					printSchedulerChain(bus, head, "head-chain")
+				}
 			}
 			if forceEmptyModemScript && !modemScriptEmptied {
 				ptr := binary.BigEndian.Uint32(bus.RAM[0x1C90:])
@@ -115,7 +138,7 @@ func main() {
 					fmt.Printf("modem ready wait patched step=%d addr=0x%08X PC=0x%08X\n", step, waitCond+10, cpu.PC)
 				}
 			}
-			if forceSchedulerHeadReady && modemScriptEmptied && !schedUnblocked && step > 60_000_000 {
+			if forceSchedulerHeadReady && !schedUnblocked && step > 1_100_000_000 {
 				head := binary.BigEndian.Uint32(bus.RAM[0x18F0:])
 				glob := binary.BigEndian.Uint32(bus.RAM[0x1900:])
 				hp := head & 0x1FFFFFFF
@@ -247,6 +270,66 @@ func main() {
 				fmt.Printf("parser error call %02d step=%d PC=0x%08X code/a0=0x%016X val/a1=0x%016X ptr=0x%08X around=%q ra=0x%016X\n",
 					parserErrors, step, cpu.PC, cpu.Regs[4], cpu.Regs[5], ptr, previewRAMString(bus, (ptr-24)&0x1FFFFFFF, 120), cpu.Regs[31])
 			}
+			if cpu.PC == 0x8024C098 && printfHits < 80 {
+				printfHits++
+				obj := uint32(cpu.Regs[4]) & 0x1FFFFFFF
+				w0, w4, w8, wc := uint32(0), uint32(0), uint32(0), uint32(0)
+				if obj+0x0F < uint32(len(bus.RAM)) {
+					w0 = binary.BigEndian.Uint32(bus.RAM[obj:])
+					w4 = binary.BigEndian.Uint32(bus.RAM[obj+4:])
+					w8 = binary.BigEndian.Uint32(bus.RAM[obj+8:])
+					wc = binary.BigEndian.Uint32(bus.RAM[obj+12:])
+				}
+				fmt.Printf("ts printf %02d step=%d fmt=%q a0=0x%016X a1=0x%016X a2=0x%016X ra=0x%016X\n",
+					printfHits, step, previewRAMString(bus, uint32(cpu.Regs[4])&0x1FFFFFFF, 160), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[31])
+				fmt.Printf("  printf obj words=%08X %08X %08X %08X s0=%q s4=%q s8=%q sc=%q\n",
+					w0, w4, w8, wc, previewRAMString(bus, w0&0x1FFFFFFF, 160), previewRAMString(bus, w4&0x1FFFFFFF, 160), previewRAMString(bus, w8&0x1FFFFFFF, 160), previewRAMString(bus, wc&0x1FFFFFFF, 160))
+			}
+			if cpu.PC == 0x802281DC && nativeLookupHits < 120 {
+				key := previewRAMString(bus, uint32(cpu.Regs[4])&0x1FFFFFFF, 96)
+				cand := previewRAMString(bus, uint32(cpu.Regs[5])&0x1FFFFFFF, 96)
+				if strings.Contains(key, "modem") || strings.Contains(cand, "modem") || strings.Contains(key, "printf") || strings.Contains(cand, "printf") {
+					nativeLookupHits++
+					fmt.Printf("native lookup %03d step=%d key=%q cand=%q a0=0x%016X a1=0x%016X ra=0x%016X s0=0x%016X s2=0x%016X\n",
+						nativeLookupHits, step, key, cand, cpu.Regs[4], cpu.Regs[5], cpu.Regs[31], cpu.Regs[16], cpu.Regs[18])
+				}
+			}
+			if cpu.PC == 0x8024B8D0 && nativeResolveHits < 80 {
+				key := previewRAMString(bus, uint32(cpu.Regs[18])&0x1FFFFFFF, 96)
+				if strings.Contains(key, "modem") || strings.Contains(key, "printf") {
+					nativeResolveHits++
+					entry := uint32(cpu.Regs[16]) & 0x1FFFFFFF
+					w0, w1, w2 := uint32(0), uint32(0), uint32(0)
+					if entry+11 < uint32(len(bus.RAM)) {
+						w0 = binary.BigEndian.Uint32(bus.RAM[entry:])
+						w1 = binary.BigEndian.Uint32(bus.RAM[entry+4:])
+						w2 = binary.BigEndian.Uint32(bus.RAM[entry+8:])
+					}
+					fmt.Printf("native resolve %02d step=%d key=%q entry=0x%08X w0=0x%08X w1=0x%08X w2=0x%08X v0=0x%016X ra=0x%016X\n",
+						nativeResolveHits, step, key, entry, w0, w1, w2, cpu.Regs[2], cpu.Regs[31])
+				}
+			}
+			logModemNative := cpu.PC == 0x8024CA18 || cpu.PC == 0x8024CA4C || cpu.PC == 0x8024CA54 || cpu.PC == 0x8024CA58 || cpu.PC == 0x8024CD48 || cpu.PC == 0x8024CD5C || cpu.PC == 0x8024CD74 || cpu.PC == 0x8024CDAC || cpu.PC == 0x8024CCE8
+			if cpu.PC == 0x8024CD20 {
+				modemDelayLoopHits++
+				logModemNative = modemDelayLoopHits <= 8 || modemDelayLoopHits%500 == 0
+			}
+			if logModemNative && modemNativeHits < 320 {
+				modemNativeHits++
+				obj := bus.Read32(0x800013D0)
+				ctxObj := uint32(0)
+				if (uint32(cpu.Regs[21])&0x1FFFFFFF)+3 < uint32(len(bus.RAM)) {
+					ctxObj = binary.BigEndian.Uint32(bus.RAM[uint32(cpu.Regs[21])&0x1FFFFFFF:])
+				}
+				op := uint32(0)
+				cb := uint32(0)
+				if (ctxObj&0x1FFFFFFF)+0x87 < uint32(len(bus.RAM)) {
+					op = binary.BigEndian.Uint32(bus.RAM[(ctxObj&0x1FFFFFFF)+0x10:])
+					cb = binary.BigEndian.Uint32(bus.RAM[(ctxObj&0x1FFFFFFF)+0x84:])
+				}
+				fmt.Printf("modem native %03d step=%d PC=0x%08X glob=0x%08X ctxObj=0x%08X op=0x%08X cb84=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s5=0x%016X ra=0x%016X\n",
+					modemNativeHits, step, cpu.PC, obj, ctxObj, op, cb, cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[21], cpu.Regs[31])
+			}
 			if (cpu.PC == 0x9FC03040 || cpu.PC == 0xBFC03040) && cpu.Regs[5] >= 0x80200000 && cpu.Regs[5] < 0x80210000 && copyEntryHits < 8 {
 				copyEntryHits++
 				fmt.Printf("copy-to-entry %d step=%d PC=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X ra=0x%016X\n", copyEntryHits, step, cpu.PC, cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[31])
@@ -336,11 +419,67 @@ func main() {
 					step, cpu.PC, cpu.Regs[2], previewRAMString(bus, uint32(cpu.Regs[4])&0x1FFFFFFF, 120),
 					binary.BigEndian.Uint32(bus.RAM[0x000EAD98:]), binary.BigEndian.Uint32(bus.RAM[0x000EADA0:]), binary.BigEndian.Uint32(bus.RAM[0x000EAD9C:]), binary.BigEndian.Uint32(bus.RAM[0x2574:]))
 			}
+			if cpu.PC == 0x802C6680 && currentTaskHits < 40 {
+				currentTaskHits++
+				glob := binary.BigEndian.Uint32(bus.RAM[0x1900:])
+				fmt.Printf("current task %02d step=%d PC=0x%08X glob=0x%08X flag1909=0x%02X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
+					currentTaskHits, step, cpu.PC, glob, bus.RAM[0x1909], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
+			}
+			if (cpu.PC == 0x802C66B4 || cpu.PC == 0x802C66BC || cpu.PC == 0x802C66D0 || cpu.PC == 0x802C66E8 || cpu.PC == 0x802C6700 || cpu.PC == 0x802C6724 || cpu.PC == 0x802C672C || cpu.PC == 0x802C6734 || cpu.PC == 0x802C6748 || cpu.PC == 0x802C6750 || cpu.PC == 0x802C6768 || cpu.PC == 0x802C6770 || cpu.PC == 0x802C67B0 || cpu.PC == 0x802C67E0 || cpu.PC == 0x802C6820 || cpu.PC == 0x802C6830 || cpu.PC == 0x802C6848 || cpu.PC == 0x802C6858 || cpu.PC == 0x8022A198 || cpu.PC == 0x8022A19C || cpu.PC == 0x8022A1A8) && currentTaskTraceHits < 160 {
+				currentTaskTraceHits++
+				fmt.Printf("current path %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
+					currentTaskTraceHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
+			}
+			if (cpu.PC == 0x802C84DC || cpu.PC == 0x802C84E8 || cpu.PC == 0x802C84F4 || cpu.PC == 0x802C8500 || cpu.PC == 0x802C8510 || cpu.PC == 0x802C8518) && currentWaitHits < 120 {
+				currentWaitHits++
+				fmt.Printf("current wait %02d step=%d PC=0x%08X inst=0x%08X b224E=0x%02X b2240=0x%02X v0=0x%016X a0=0x%016X ra=0x%016X\n",
+					currentWaitHits, step, cpu.PC, bus.Read32(cpu.PC), bus.RAM[0x224E], bus.RAM[0x2240], cpu.Regs[2], cpu.Regs[4], cpu.Regs[31])
+			}
+			if (cpu.PC == 0x802C73C0 || cpu.PC == 0x802C73C8 || cpu.PC == 0x802C73D0 || cpu.PC == 0x802C7440 || cpu.PC == 0x802C7450 || cpu.PC == 0x802C74B8) && bootGateHits < 120 {
+				bootGateHits++
+				fmt.Printf("boot gate %02d step=%d PC=0x%08X inst=0x%08X b224E=0x%02X b2240=0x%02X v0=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X\n",
+					bootGateHits, step, cpu.PC, bus.Read32(cpu.PC), bus.RAM[0x224E], bus.RAM[0x2240], cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31])
+			}
 			if cpu.PC >= 0x8022A430 && cpu.PC < 0x8022A500 && lateLoopReports < 40 {
 				lateLoopReports++
 				fmt.Printf("late loop %d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X t0=0x%016X t1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
 					lateLoopReports, step, cpu.PC, bus.Read32(cpu.PC),
 					cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[8], cpu.Regs[9], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
+			}
+			if cpu.PC >= 0x8022A430 && cpu.PC < 0x8022A500 && !schedulerCodeDumped {
+				schedulerCodeDumped = true
+				printCodeRange(bus, 0x8022A240, 0x8022A380, "sched code")
+				printCodeRange(bus, 0x8022A430, 0x8022A4D0, "sched code")
+				printCodeRange(bus, 0x8022A7A0, 0x8022A820, "sched code")
+				printCodeRange(bus, 0x8022ADE0, 0x8022AE40, "sched code")
+			}
+			if cpu.PC >= 0x80221500 && cpu.PC < 0x80221620 && !irqCodeDumped {
+				irqCodeDumped = true
+				printCodeRange(bus, 0x802214E0, 0x80221640, "irq code")
+			}
+			if cpu.PC >= 0x80221500 && cpu.PC < 0x80221620 && irqLoopHits < 120 {
+				irqLoopHits++
+				fmt.Printf("irq loop %03d step=%d PC=0x%08X inst=0x%08X Status=0x%08X Cause=0x%08X Count=0x%08X Compare=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X t9=0x%016X k0=0x%016X k1=0x%016X ra=0x%016X busStat=0x%08X busEn=0x%08X timStat=0x%08X timEn=0x%08X rioStat=0x%08X rioEn=0x%08X\n",
+					irqLoopHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.COP0[Status], cpu.COP0[Cause], cpu.COP0[Count], cpu.COP0[Compare], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[25], cpu.Regs[26], cpu.Regs[27], cpu.Regs[31], bus.Asic.BusIntStat, bus.Asic.BusIntEnable, bus.Asic.TimIntStat, bus.Asic.TimIntEnable, bus.Asic.RIOIntStat, bus.Asic.RIOIntEnable)
+			}
+			if cpu.PC >= 0x802220B8 && cpu.PC <= 0x802220C8 && interruptHelperHits < 80 {
+				interruptHelperHits++
+				fmt.Printf("int helper %02d step=%d PC=0x%08X inst=0x%08X Status=0x%08X Cause=0x%08X Count=0x%08X Compare=0x%08X a0=0x%016X ra=0x%016X\n",
+					interruptHelperHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.COP0[Status], cpu.COP0[Cause], cpu.COP0[Count], cpu.COP0[Compare], cpu.Regs[4], cpu.Regs[31])
+			}
+			if cpu.PC >= 0x80221A60 && cpu.PC <= 0x80221AB0 && idleBlockHits < 80 {
+				idleBlockHits++
+				fmt.Printf("idle block %02d step=%d PC=0x%08X inst=0x%08X Status=0x%08X Cause=0x%08X Count=0x%08X Compare=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X busStat=0x%08X busEn=0x%08X timStat=0x%08X timEn=0x%08X\n",
+					idleBlockHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.COP0[Status], cpu.COP0[Cause], cpu.COP0[Count], cpu.COP0[Compare], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31], bus.Asic.BusIntStat, bus.Asic.BusIntEnable, bus.Asic.TimIntStat, bus.Asic.TimIntEnable)
+			}
+			if cpu.PC >= 0x8022A680 && cpu.PC <= 0x8022A7C0 && schedulerDispatchHits < 120 {
+				schedulerDispatchHits++
+				fmt.Printf("sched dispatch %03d step=%d PC=0x%08X inst=0x%08X Status=0x%08X Cause=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X\n",
+					schedulerDispatchHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.COP0[Status], cpu.COP0[Cause], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31])
+				if schedulerDispatchHits == 1 {
+					printCodeRange(bus, 0x8022A600, 0x8022A720, "timer sched")
+					dumpRAMRange(bus, 0x0022A600, 0x200, "debug_8022a600.bin")
+				}
 			}
 			if cpu.PC == 0x8020912C && !idleLoopReported {
 				idleLoopReported = true
@@ -407,10 +546,16 @@ func main() {
 					s4Changes, step, beforePC, beforeInst, beforeS4, cpu.Regs[20])
 			}
 		}
-		fmt.Printf("Final instruction: PC=0x%08X inst=0x%08X EPC=0x%08X epcInst=0x%08X BadVAddr=0x%08X Cause=0x%08X\n",
-			cpu.PC, bus.Read32(cpu.PC), cpu.COP0[EPC], bus.Read32(cpu.COP0[EPC]), cpu.COP0[BadVAddr], cpu.COP0[Cause])
+		fmt.Printf("Final instruction: PC=0x%08X inst=0x%08X EPC=0x%08X epcInst=0x%08X BadVAddr=0x%08X Cause=0x%08X Status=0x%08X Count=0x%08X Compare=0x%08X\n",
+			cpu.PC, bus.Read32(cpu.PC), cpu.COP0[EPC], bus.Read32(cpu.COP0[EPC]), cpu.COP0[BadVAddr], cpu.COP0[Cause], cpu.COP0[Status], cpu.COP0[Count], cpu.COP0[Compare])
+		ptr := binary.BigEndian.Uint32(bus.RAM[0x1C90:])
+		fmt.Printf("Final parser ptr=0x%08X around=%q\n", ptr, previewRAMString(bus, (ptr-96)&0x1FFFFFFF, 240))
 		printRangeSummary(bus, 0x00400000, 0x00100000, "final video-ish 0x80400000")
 		dumpRAMRange(bus, 0x00400000, 0x100000, "debug_video_80400000_final.bin")
+		writeDebugFrameCandidates(bus, 0x00400000, 0x00100000)
+		dumpRAMRange(bus, 0x0022A000, 0x900, "debug_8022a000.bin")
+		dumpRAMRange(bus, 0x002AD000, 0x700, "debug_802ad000.bin")
+		dumpRAMRange(bus, 0x002C6600, 0x600, "debug_802c6600.bin")
 		dumpRAMRange(bus, 0x002C7000, 0x2500, "debug_802c7000_full.bin")
 		dumpRAMRange(bus, 0x00211000, 0x800, "debug_80211000.bin")
 		dumpRAMRange(bus, 0x00001400, 0x500, "debug_irq_table.bin")
@@ -475,6 +620,7 @@ func main() {
 	if bus.IDE != nil {
 		fmt.Printf("IDE sector reads: %d\n", bus.IDE.ReadCount)
 	}
+	fmt.Printf("Modem stage=%d reads=%d writes=%d rx=%d\n", bus.ModemStage, bus.ModemReadCnt, bus.ModemWriteCnt, len(bus.ModemRX))
 	fmt.Printf("ASIC final IRQ BusStat=0x%08X BusEn=0x%08X TimStat=0x%08X TimEn=0x%08X TimerCompare=0x%08X SysTimerNext=0x%016X Cycles=0x%016X\n", bus.Asic.BusIntStat, bus.Asic.BusIntEnable, bus.Asic.TimIntStat, bus.Asic.TimIntEnable, bus.Asic.TimerCompare, bus.Asic.SysTimerNext, bus.Asic.Cycles)
 	fmt.Printf("Written ASIC registers:\n")
 	offs := make([]uint32, 0, len(bus.Asic.WriteLog))
@@ -503,6 +649,112 @@ func main() {
 	}
 	fmt.Printf("%d\n", used)
 	bus.PrintTopPollAddrs(12)
+}
+
+func printSchedulerNode(bus *Bus, ptr uint32, label string) {
+	p := ptr & 0x1FFFFFFF
+	if p+0x23 >= uint32(len(bus.RAM)) {
+		fmt.Printf("sched %s ptr=0x%08X out-of-range\n", label, ptr)
+		return
+	}
+	fmt.Printf("sched %s ptr=0x%08X +00=0x%08X +04=0x%08X +08=0x%08X +0C=0x%08X +10=%d +14=0x%08X +18=0x%08X +1C=0x%08X +20=0x%08X\n",
+		label, ptr,
+		binary.BigEndian.Uint32(bus.RAM[p:]),
+		binary.BigEndian.Uint32(bus.RAM[p+4:]),
+		binary.BigEndian.Uint32(bus.RAM[p+8:]),
+		binary.BigEndian.Uint32(bus.RAM[p+12:]),
+		binary.BigEndian.Uint32(bus.RAM[p+16:]),
+		binary.BigEndian.Uint32(bus.RAM[p+20:]),
+		binary.BigEndian.Uint32(bus.RAM[p+24:]),
+		binary.BigEndian.Uint32(bus.RAM[p+28:]),
+		binary.BigEndian.Uint32(bus.RAM[p+32:]))
+}
+
+func printSchedulerChain(bus *Bus, ptr uint32, label string) {
+	for i := 0; i < 6 && ptr != 0; i++ {
+		p := ptr & 0x1FFFFFFF
+		if p+0x23 >= uint32(len(bus.RAM)) {
+			fmt.Printf("sched %s[%d] ptr=0x%08X out-of-range\n", label, i, ptr)
+			return
+		}
+		next := binary.BigEndian.Uint32(bus.RAM[p:])
+		fmt.Printf("sched %s[%d] ptr=0x%08X cb=0x%08X type=0x%08X tick=%d next=0x%08X data=0x%08X flags=0x%08X\n",
+			label, i, ptr, binary.BigEndian.Uint32(bus.RAM[p+8:]), binary.BigEndian.Uint32(bus.RAM[p+12:]), binary.BigEndian.Uint32(bus.RAM[p+16:]), next, binary.BigEndian.Uint32(bus.RAM[p+4:]), binary.BigEndian.Uint32(bus.RAM[p+32:]))
+		ptr = next
+	}
+}
+
+func printCodeRange(bus *Bus, start uint32, end uint32, label string) {
+	for addr := start; addr < end; addr += 4 {
+		fmt.Printf("%s 0x%08X 0x%08X\n", label, addr, bus.Read32(addr))
+	}
+}
+
+func writeDebugFrameCandidates(bus *Bus, base uint32, size uint32) {
+	if base+size > uint32(len(bus.RAM)) {
+		return
+	}
+	first := uint32(0xFFFFFFFF)
+	for i := uint32(0); i < size; i++ {
+		if bus.RAM[base+i] != 0 {
+			first = i
+			break
+		}
+	}
+	if first == 0xFFFFFFFF {
+		return
+	}
+	if first > 0xE0000 {
+		first = 0xE0000
+	}
+	writeGray4PNG(bus.RAM[base+first:], 640, 400, "debug_frame_4bpp_640x400.png")
+	writeGray8PNG(bus.RAM[base+first:], 512, 256, "debug_frame_8bpp_512x256.png")
+	fmt.Printf("Debug frames written from RAM 0x%08X\n", 0x80400000+first)
+}
+
+func writeGray4PNG(data []byte, w int, h int, path string) {
+	if len(data) < w*h/2 {
+		return
+	}
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			b := data[(y*w+x)/2]
+			v := b & 0x0F
+			if x&1 == 0 {
+				v = b >> 4
+			}
+			c := uint8(v * 17)
+			img.SetRGBA(x, y, color.RGBA{c, c, c, 0xFF})
+		}
+	}
+	writePNG(path, img)
+}
+
+func writeGray8PNG(data []byte, w int, h int, path string) {
+	if len(data) < w*h {
+		return
+	}
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			c := data[y*w+x]
+			img.SetRGBA(x, y, color.RGBA{c, c, c, 0xFF})
+		}
+	}
+	writePNG(path, img)
+}
+
+func writePNG(path string, img image.Image) {
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "png %s: %v\n", path, err)
+		return
+	}
+	defer f.Close()
+	if err := png.Encode(f, img); err != nil {
+		fmt.Fprintf(os.Stderr, "png %s: %v\n", path, err)
+	}
 }
 
 func loadBootROM(bus *Bus) error {

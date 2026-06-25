@@ -14,17 +14,22 @@ const (
 )
 
 type Bus struct {
-	RAM         [RAM_SIZE]byte
-	ROM         [ROM_MAX]byte
-	ROMSz       uint32
-	Asic        *SoloASIC
-	IDE         *IDEController
-	CPU         *CPU
-	AsicReadCnt [0x10000]uint64
-	Tracking    bool
-	PollCnt     map[uint32]uint64
-	RIOReadCnt  uint64
-	RIOWriteCnt uint64
+	RAM           [RAM_SIZE]byte
+	ROM           [ROM_MAX]byte
+	ROMSz         uint32
+	Asic          *SoloASIC
+	IDE           *IDEController
+	CPU           *CPU
+	AsicReadCnt   [0x10000]uint64
+	Tracking      bool
+	PollCnt       map[uint32]uint64
+	RIOReadCnt    uint64
+	RIOWriteCnt   uint64
+	ModemReadCnt  uint64
+	ModemWriteCnt uint64
+	ModemRX       []byte
+	ModemStage    int
+	ModemStageAt  uint64
 }
 
 func NewBus() *Bus {
@@ -90,6 +95,9 @@ func (b *Bus) Read8(addr uint32) uint8 {
 		off := p - ROM_BASE
 		return b.ROM[off]
 	}
+	if p >= 0x1E000000 && p < 0x1E000020 {
+		return b.modemRead8(p - 0x1E000000)
+	}
 	if p >= 0x04000000 && p < 0x05000000 {
 		return uint8(b.Asic.Read(p & 0xFFFF))
 	}
@@ -104,6 +112,9 @@ func (b *Bus) Read16(addr uint32) uint16 {
 	if p >= ROM_BASE && p < ROM_BASE+uint32(ROM_MAX)-1 {
 		off := p - ROM_BASE
 		return binary.BigEndian.Uint16(b.ROM[off:])
+	}
+	if p >= 0x1E000000 && p < 0x1E000020 {
+		return uint16(b.modemRead8(p - 0x1E000000))
 	}
 	if p >= 0x04000000 && p < 0x05000000 {
 		return uint16(b.Asic.Read(p & 0xFFFF))
@@ -134,6 +145,9 @@ func (b *Bus) Read32(addr uint32) uint32 {
 	if p >= 0x1E400000 && p <= 0x1E80001F {
 		return b.IDE.Read32(p - 0x1E400000)
 	}
+	if p >= 0x1E000000 && p < 0x1E000020 {
+		return uint32(b.modemRead8(p - 0x1E000000))
+	}
 	if rp, ok := ramMirror(p, 4); ok {
 		if b.Tracking && ((rp >= 0x710000 && rp <= 0x71FFFF) || (rp >= 0x7F0000 && rp <= 0x7FFFFF)) {
 			b.PollCnt[rp]++
@@ -150,7 +164,7 @@ func (b *Bus) Read32(addr uint32) uint32 {
 func (b *Bus) Write8(addr, val uint32) {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 1); ok {
-		if ((rp >= 0x330 && rp <= 0x337) || (rp >= 0x288 && rp <= 0x28B) || (rp >= 0x101C && rp <= 0x101F) || (rp >= 0x1904 && rp <= 0x1907)) && b.CPU != nil {
+		if ((rp >= 0x330 && rp <= 0x337) || (rp >= 0x288 && rp <= 0x28B) || (rp >= 0x101C && rp <= 0x101F) || (rp >= 0x1904 && rp <= 0x1909)) && b.CPU != nil {
 			fmt.Printf("RAM watch8 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%02X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val&0xFF)
 		}
@@ -168,12 +182,16 @@ func (b *Bus) Write8(addr, val uint32) {
 		b.Asic.Write(p&0xFFFF, val)
 		return
 	}
+	if p >= 0x1E000000 && p < 0x1E000020 {
+		b.modemWrite(p-0x1E000000, val, 1)
+		return
+	}
 }
 
 func (b *Bus) Write16(addr, val uint32) {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 2); ok {
-		if ((rp <= 0x337 && rp+1 >= 0x330) || (rp <= 0x28B && rp+1 >= 0x288) || (rp <= 0x101F && rp+1 >= 0x101C) || (rp <= 0x1907 && rp+1 >= 0x1904)) && b.CPU != nil {
+		if ((rp <= 0x337 && rp+1 >= 0x330) || (rp <= 0x28B && rp+1 >= 0x288) || (rp <= 0x101F && rp+1 >= 0x101C) || (rp <= 0x1909 && rp+1 >= 0x1904)) && b.CPU != nil {
 			fmt.Printf("RAM watch16 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%04X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val&0xFFFF)
 		}
@@ -191,6 +209,10 @@ func (b *Bus) Write16(addr, val uint32) {
 		b.Asic.Write(p&0xFFFF, val)
 		return
 	}
+	if p >= 0x1E000000 && p < 0x1E000020 {
+		b.modemWrite(p-0x1E000000, val, 2)
+		return
+	}
 }
 
 func (b *Bus) Write32(addr, val uint32) {
@@ -199,8 +221,12 @@ func (b *Bus) Write32(addr, val uint32) {
 		b.IDE.Write32(p-0x1E400000, val)
 		return
 	}
+	if p >= 0x1E000000 && p < 0x1E000020 {
+		b.modemWrite(p-0x1E000000, val, 4)
+		return
+	}
 	if rp, ok := ramMirror(p, 4); ok {
-		if ((rp <= 0x337 && rp+3 >= 0x330) || (rp <= 0x28B && rp+3 >= 0x288) || (rp <= 0x101F && rp+3 >= 0x101C) || (rp <= 0x1907 && rp+3 >= 0x1904)) && b.CPU != nil {
+		if ((rp <= 0x337 && rp+3 >= 0x330) || (rp <= 0x28B && rp+3 >= 0x288) || (rp <= 0x101F && rp+3 >= 0x101C) || (rp <= 0x1907 && rp+3 >= 0x18F0) || (rp <= 0xEEDD0 && rp+3 >= 0xEEDA8) || (rp <= 0xF0B93 && rp+3 >= 0xF0B70)) && b.CPU != nil {
 			fmt.Printf("RAM watch32 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%08X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val)
 			if rp <= 0x101F && rp+3 >= 0x101C {
@@ -225,6 +251,69 @@ func (b *Bus) Write32(addr, val uint32) {
 		}
 		b.Asic.Write(p&0xFFFF, val)
 		return
+	}
+}
+
+func (b *Bus) modemRead8(off uint32) uint8 {
+	b.ModemReadCnt++
+	if b.CPU != nil && (b.ModemReadCnt <= 128 || b.ModemReadCnt%1000000 == 0) {
+		fmt.Printf("modem read #%d step=%d PC=0x%08X execPC=0x%08X off=0x%02X\n", b.ModemReadCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, off)
+	}
+	switch off {
+	case 0x00:
+		if len(b.ModemRX) == 0 {
+			return 0
+		}
+		v := b.ModemRX[0]
+		b.ModemRX = b.ModemRX[1:]
+		if len(b.ModemRX) == 0 && b.ModemStage == 1 {
+			b.ModemStage = 2
+			b.ModemStageAt = b.ModemWriteCnt
+			if b.CPU != nil {
+				fmt.Printf("modem stage 1 consumed step=%d writes=%d reads=%d\n", b.CPU.Steps, b.ModemWriteCnt, b.ModemReadCnt)
+			}
+		}
+		if len(b.ModemRX) == 0 && b.ModemStage == 3 {
+			b.ModemStage = 4
+			if b.CPU != nil {
+				fmt.Printf("modem stage 2 consumed step=%d writes=%d reads=%d\n", b.CPU.Steps, b.ModemWriteCnt, b.ModemReadCnt)
+			}
+		}
+		return v
+	case 0x14:
+		if b.CPU != nil && b.CPU.PC >= 0x8024CB50 && b.CPU.PC < 0x8024CC00 {
+			return 0x20
+		}
+		if len(b.ModemRX) != 0 {
+			return 0x21
+		}
+		return 0x20
+	default:
+		return 0
+	}
+}
+
+func (b *Bus) modemWrite(off, val, width uint32) {
+	b.ModemWriteCnt++
+	if b.CPU != nil && (b.ModemWriteCnt <= 128 || b.ModemWriteCnt%1000000 == 0) {
+		fmt.Printf("modem write #%d step=%d PC=0x%08X execPC=0x%08X off=0x%02X width=%d val=0x%X\n", b.ModemWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, off, width, val)
+	}
+	if off == 0 && byte(val) == '\r' {
+		b.ModemRX = append(b.ModemRX, '\n', '\n')
+	}
+	if off == 0 && b.ModemStage == 0 && b.ModemWriteCnt > 64 {
+		b.ModemRX = append(b.ModemRX, []byte("Download Modem Firmware ..")...)
+		b.ModemStage = 1
+		if b.CPU != nil {
+			fmt.Printf("modem stage 1 queued step=%d writes=%d\n", b.CPU.Steps, b.ModemWriteCnt)
+		}
+	}
+	if off == 0 && b.ModemStage == 2 && b.ModemWriteCnt > b.ModemStageAt+64 {
+		b.ModemRX = append(b.ModemRX, []byte("Modem Firmware Successfully Loaded")...)
+		b.ModemStage = 3
+		if b.CPU != nil {
+			fmt.Printf("modem stage 2 queued step=%d writes=%d\n", b.CPU.Steps, b.ModemWriteCnt)
+		}
 	}
 }
 
