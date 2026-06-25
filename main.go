@@ -17,6 +17,7 @@ const bootROMPath = "roms/bootrom.brom"
 const forceEmptyModemScript = false
 const forceSchedulerHeadReady = false
 const forceBypassModemReadyWait = false
+const forceBootEventGate = false
 
 func main() {
 	bus := NewBus()
@@ -93,6 +94,8 @@ func main() {
 		currentTaskTraceHits := 0
 		currentWaitHits := 0
 		bootGateHits := 0
+		bootListHits := 0
+		bootListPCs := make(map[uint32]bool)
 		schedulerCodeDumped := false
 		irqLoopHits := 0
 		irqCodeDumped := false
@@ -434,11 +437,30 @@ func main() {
 				currentWaitHits++
 				fmt.Printf("current wait %02d step=%d PC=0x%08X inst=0x%08X b224E=0x%02X b2240=0x%02X v0=0x%016X a0=0x%016X ra=0x%016X\n",
 					currentWaitHits, step, cpu.PC, bus.Read32(cpu.PC), bus.RAM[0x224E], bus.RAM[0x2240], cpu.Regs[2], cpu.Regs[4], cpu.Regs[31])
+				if forceBootEventGate && currentWaitHits == 12 {
+					bus.RAM[0x224E] = 1
+					fmt.Printf("forced b224E=1 at step=%d\n", step)
+				}
 			}
 			if (cpu.PC == 0x802C73C0 || cpu.PC == 0x802C73C8 || cpu.PC == 0x802C73D0 || cpu.PC == 0x802C7440 || cpu.PC == 0x802C7450 || cpu.PC == 0x802C74B8) && bootGateHits < 120 {
 				bootGateHits++
 				fmt.Printf("boot gate %02d step=%d PC=0x%08X inst=0x%08X b224E=0x%02X b2240=0x%02X v0=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X\n",
 					bootGateHits, step, cpu.PC, bus.Read32(cpu.PC), bus.RAM[0x224E], bus.RAM[0x2240], cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31])
+			}
+			if cpu.PC >= 0x802B40F0 && cpu.PC < 0x802B4140 && bootListHits < 160 {
+				bootListHits++
+				fmt.Printf("boot list %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X\n",
+					bootListHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31])
+			}
+			if cpu.PC >= 0x802B4000 && cpu.PC < 0x802B4800 && !bootListPCs[cpu.PC] && len(bootListPCs) < 240 {
+				bootListPCs[cpu.PC] = true
+				fmt.Printf("list pc step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X g1e74=0x%08X\n",
+					step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E74:]))
+			}
+			if cpu.PC >= 0x8024E760 && cpu.PC <= 0x8024E7A4 && bootListHits < 220 {
+				bootListHits++
+				fmt.Printf("global clear %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X ra=0x%016X g1e74=0x%08X\n",
+					bootListHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E74:]))
 			}
 			if cpu.PC >= 0x8022A430 && cpu.PC < 0x8022A500 && lateLoopReports < 40 {
 				lateLoopReports++
@@ -552,9 +574,12 @@ func main() {
 		fmt.Printf("Final parser ptr=0x%08X around=%q\n", ptr, previewRAMString(bus, (ptr-96)&0x1FFFFFFF, 240))
 		printRangeSummary(bus, 0x00400000, 0x00100000, "final video-ish 0x80400000")
 		dumpRAMRange(bus, 0x00400000, 0x100000, "debug_video_80400000_final.bin")
-		writeDebugFrameCandidates(bus, 0x00400000, 0x00100000)
+		if bus.Asic.VIDNStart&0x1FFFFFFF < RAM_SIZE {
+			writeDebugFrameCandidates(bus, bus.Asic.VIDNStart&0x1FFFFFFF, 0x00100000)
+		}
 		dumpRAMRange(bus, 0x0022A000, 0x900, "debug_8022a000.bin")
 		dumpRAMRange(bus, 0x002AD000, 0x700, "debug_802ad000.bin")
+		dumpRAMRange(bus, 0x002B4000, 0x900, "debug_802b4000.bin")
 		dumpRAMRange(bus, 0x002C6600, 0x600, "debug_802c6600.bin")
 		dumpRAMRange(bus, 0x002C7000, 0x2500, "debug_802c7000_full.bin")
 		dumpRAMRange(bus, 0x00211000, 0x800, "debug_80211000.bin")
@@ -709,7 +734,7 @@ func writeDebugFrameCandidates(bus *Bus, base uint32, size uint32) {
 	}
 	writeGray4PNG(bus.RAM[base+first:], 640, 400, "debug_frame_4bpp_640x400.png")
 	writeGray8PNG(bus.RAM[base+first:], 512, 256, "debug_frame_8bpp_512x256.png")
-	fmt.Printf("Debug frames written from RAM 0x%08X\n", 0x80400000+first)
+	fmt.Printf("Debug frames written from RAM 0x%08X\n", base+first)
 }
 
 func writeGray4PNG(data []byte, w int, h int, path string) {
