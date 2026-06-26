@@ -95,6 +95,7 @@ func main() {
 		currentTaskTraceHits := 0
 		gateFlagTraceHits := 0
 		gateFlagFuncHits := 0
+		gateQueueCallerHits := 0
 		currentWaitHits := 0
 		bootGateHits := 0
 		bootGateCodeDumped := false
@@ -114,6 +115,7 @@ func main() {
 		modemReadyWaitPatched := false
 		schedUnblocked := false
 		gateSetterPatched := false
+		gateQueueWord := binary.BigEndian.Uint32(bus.RAM[0x80A8C:])
 		for step := 0; step < 500_000_000; step++ {
 			if step > 38_000_000 {
 				binary.BigEndian.PutUint32(bus.RAM[0x2730:], uint32(bus.Asic.Cycles/100000))
@@ -472,6 +474,11 @@ func main() {
 				fmt.Printf("gate flag func %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X g2170=%08X g2174=%08X g2178=%08X g217C=%08X ra=0x%016X\n",
 					gateFlagFuncHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], binary.BigEndian.Uint32(bus.RAM[0x2170:]), binary.BigEndian.Uint32(bus.RAM[0x2174:]), binary.BigEndian.Uint32(bus.RAM[0x2178:]), binary.BigEndian.Uint32(bus.RAM[0x217C:]), cpu.Regs[31])
 			}
+			if (cpu.PC == 0x80234F50 || cpu.PC == 0x802B4490 || cpu.PC == 0x802C6800) && gateQueueCallerHits < 40 {
+				gateQueueCallerHits++
+				fmt.Printf("gate queue caller %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X q80A8C=%08X\n",
+					gateQueueCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x80A8C:]))
+			}
 			if (cpu.PC == 0x802C6798 || cpu.PC == 0x802C6808 || cpu.PC == 0x802C683C || cpu.PC == 0x802C6C84) && currentTaskTraceHits < 200 {
 				currentTaskTraceHits++
 				fmt.Printf("gate setter call %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
@@ -640,6 +647,12 @@ func main() {
 				}
 				break
 			}
+			newGateQueueWord := binary.BigEndian.Uint32(bus.RAM[0x80A8C:])
+			if newGateQueueWord != gateQueueWord {
+				fmt.Printf("gate queue word changed step=%d PC=0x%08X inst=0x%08X old=%08X new=%08X ra=0x%016X v0=0x%016X a0=0x%016X a1=0x%016X\n",
+					step, beforePC, beforeInst, gateQueueWord, newGateQueueWord, cpu.Regs[31], cpu.Regs[2], cpu.Regs[4], cpu.Regs[5])
+				gateQueueWord = newGateQueueWord
+			}
 			if cpu.Regs[20] != beforeS4 && beforePC >= 0x80200000 && s4Changes < 16 {
 				s4Changes++
 				fmt.Printf("s4 change %d step=%d PC=0x%08X inst=0x%08X old=0x%016X new=0x%016X\n",
@@ -652,6 +665,8 @@ func main() {
 			cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31])
 		fmt.Printf("Final gate 2240=%02X 2241=%02X 2242=%02X 2243=%02X 2248=%02X 2249=%02X 224A=%02X 224D=%02X 224E=%02X\n",
 			bus.RAM[0x2240], bus.RAM[0x2241], bus.RAM[0x2242], bus.RAM[0x2243], bus.RAM[0x2248], bus.RAM[0x2249], bus.RAM[0x224A], bus.RAM[0x224D], bus.RAM[0x224E])
+		fmt.Printf("Final gate queue 80A88=%08X 80A8C=%08X 80A90=%08X 80A94=%08X 80A98=%08X\n",
+			binary.BigEndian.Uint32(bus.RAM[0x80A88:]), binary.BigEndian.Uint32(bus.RAM[0x80A8C:]), binary.BigEndian.Uint32(bus.RAM[0x80A90:]), binary.BigEndian.Uint32(bus.RAM[0x80A94:]), binary.BigEndian.Uint32(bus.RAM[0x80A98:]))
 		fmt.Printf("Final eventq 1E70=%08X 1E74=%08X ACB8=%08X ACC0=%08X ACC4=%08X\n",
 			binary.BigEndian.Uint32(bus.RAM[0x1E70:]), binary.BigEndian.Uint32(bus.RAM[0x1E74:]), binary.BigEndian.Uint32(bus.RAM[0xACB8:]), binary.BigEndian.Uint32(bus.RAM[0xACC0:]), binary.BigEndian.Uint32(bus.RAM[0xACC4:]))
 		eventTable := binary.BigEndian.Uint32(bus.RAM[0x25D4:]) & 0x1FFFFFFF
@@ -670,6 +685,8 @@ func main() {
 		printStoreImmRefs(bus, 0x224E, 16)
 		printJALRefs(bus, 0x802C7464, 16)
 		printJALRefs(bus, 0x802C52A4, 16)
+		printCodeRange(bus, 0x80234F20, 0x80234F80, "gate queue caller")
+		printCodeRange(bus, 0x802B4460, 0x802B44C0, "gate queue caller")
 		printCodeRange(bus, 0x802C5240, 0x802C5320, "gate flags func")
 		printCodeRange(bus, 0x802C66F0, 0x802C6850, "gate caller")
 		printCodeRange(bus, 0x802A9BC0, 0x802A9C30, "gate cond")
