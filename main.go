@@ -98,6 +98,8 @@ func main() {
 		timerIrqCallbackHits := 0
 		currentTaskHits := 0
 		currentTaskTraceHits := 0
+		currentTaskWindowUntil := 0
+		currentTaskWindowHits := 0
 		gateFlagTraceHits := 0
 		gateFlagFuncHits := 0
 		gateQueueCallerHits := 0
@@ -113,6 +115,8 @@ func main() {
 		gateListBuildHits := 0
 		gateListBuildDumped := false
 		gateInsertHits := 0
+		kseg2AllocHits := 0
+		kseg2AllocDumped := false
 		modemLoopHits := 0
 		modemCoreHits := 0
 		modemCodeDumped := false
@@ -460,6 +464,22 @@ func main() {
 				fmt.Printf("current task %02d step=%d PC=0x%08X glob=0x%08X flag1909=0x%02X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
 					currentTaskHits, step, cpu.PC, glob, bus.RAM[0x1909], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
 			}
+			if step > 54_700_000 && cpu.PC == 0x802C6820 && currentTaskWindowUntil == 0 {
+				currentTaskWindowUntil = step + 80
+			}
+			if step < currentTaskWindowUntil && currentTaskWindowHits < 120 {
+				currentTaskWindowHits++
+				s0p := uint32(cpu.Regs[16]) & 0x1FFFFFFF
+				w0, w4, wc, w3c4 := uint32(0), uint32(0), uint32(0), uint32(0)
+				if s0p+0x3C7 < uint32(len(bus.RAM)) {
+					w0 = binary.BigEndian.Uint32(bus.RAM[s0p:])
+					w4 = binary.BigEndian.Uint32(bus.RAM[s0p+4:])
+					wc = binary.BigEndian.Uint32(bus.RAM[s0p+12:])
+					w3c4 = binary.BigEndian.Uint32(bus.RAM[s0p+0x3C4:])
+				}
+				fmt.Printf("current window %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X s0w=%08X/%08X/%08X/%08X list=%08X/%08X/%08X/%08X\n",
+					currentTaskWindowHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], w0, w4, wc, w3c4, binary.BigEndian.Uint32(bus.RAM[0x7E930:]), binary.BigEndian.Uint32(bus.RAM[0x7E938:]), binary.BigEndian.Uint32(bus.RAM[0x7E93C:]), binary.BigEndian.Uint32(bus.RAM[0x7E948:]))
+			}
 			if (cpu.PC == 0x802C66B4 || cpu.PC == 0x802C66BC || cpu.PC == 0x802C66D0 || cpu.PC == 0x802C66E8 || cpu.PC == 0x802C6700 || cpu.PC == 0x802C6724 || cpu.PC == 0x802C672C || cpu.PC == 0x802C6734 || cpu.PC == 0x802C6748 || cpu.PC == 0x802C6750 || cpu.PC == 0x802C6768 || cpu.PC == 0x802C6770 || cpu.PC == 0x802C6798 || cpu.PC == 0x802C67B0 || cpu.PC == 0x802C67E0 || cpu.PC == 0x802C67E8 || cpu.PC == 0x802C67EC || cpu.PC == 0x802C67F4 || cpu.PC == 0x802C6800 || cpu.PC == 0x802C6808 || cpu.PC == 0x802C6820 || cpu.PC == 0x802C6828 || cpu.PC == 0x802C6830 || cpu.PC == 0x802C6834 || cpu.PC == 0x802C6838 || cpu.PC == 0x802C683C || cpu.PC == 0x802C6848 || cpu.PC == 0x802C6858 || cpu.PC == 0x802C6C84 || cpu.PC == 0x8022A198 || cpu.PC == 0x8022A19C || cpu.PC == 0x8022A1A8) && currentTaskTraceHits < 180 {
 				currentTaskTraceHits++
 				fmt.Printf("current path %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
@@ -709,6 +729,15 @@ func main() {
 					if entry.step != 0 {
 						fmt.Printf("  recent step=%d PC=0x%08X inst=0x%08X\n", entry.step, entry.pc, entry.inst)
 					}
+				}
+			}
+			if cpu.PC >= 0x80213F80 && cpu.PC < 0x80214020 && kseg2AllocHits < 120 {
+				kseg2AllocHits++
+				fmt.Printf("kseg2 alloc %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X g16A0=0x%08X g17A0=0x%08X\n",
+					kseg2AllocHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x16A0:]), binary.BigEndian.Uint32(bus.RAM[0x17A0:]))
+				if !kseg2AllocDumped {
+					kseg2AllocDumped = true
+					printCodeRange(bus, 0x80213F80, 0x80214020, "kseg2 alloc")
 				}
 			}
 			recent[step%len(recent)] = struct {
