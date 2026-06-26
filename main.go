@@ -18,6 +18,7 @@ const forceEmptyModemScript = false
 const forceSchedulerHeadReady = false
 const forceBypassModemReadyWait = false
 const forceBootEventGate = false
+const forceGateSetterCall = false
 
 func main() {
 	bus := NewBus()
@@ -110,6 +111,7 @@ func main() {
 		modemScriptEmptied := false
 		modemReadyWaitPatched := false
 		schedUnblocked := false
+		gateSetterPatched := false
 		for step := 0; step < 500_000_000; step++ {
 			if step > 38_000_000 {
 				binary.BigEndian.PutUint32(bus.RAM[0x2730:], uint32(bus.Asic.Cycles/100000))
@@ -164,6 +166,11 @@ func main() {
 						fmt.Printf("scheduler head tick raised step=%d head=0x%08X %d->%d glob=0x%08X PC=0x%08X\n", step, head, headTick, globTick, glob, cpu.PC)
 					}
 				}
+			}
+			if forceGateSetterCall && !gateSetterPatched && step > 54_000_000 {
+				binary.BigEndian.PutUint32(bus.RAM[0x2C6834:], 0)
+				gateSetterPatched = true
+				fmt.Printf("gate setter branch patched step=%d PC=0x%08X\n", step, cpu.PC)
 			}
 			p := cpu.PC & 0x1FFFFFFF
 			if p >= RAM_SIZE && (p < ROM_BASE || p >= ROM_BASE+uint32(ROM_MAX)) {
@@ -442,6 +449,11 @@ func main() {
 				fmt.Printf("current path %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
 					currentTaskTraceHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
 			}
+			if (cpu.PC == 0x802C6798 || cpu.PC == 0x802C6808 || cpu.PC == 0x802C683C || cpu.PC == 0x802C6C84) && currentTaskTraceHits < 200 {
+				currentTaskTraceHits++
+				fmt.Printf("gate setter call %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
+					currentTaskTraceHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
+			}
 			if cpu.PC >= 0x802C5F80 && cpu.PC < 0x802C6040 && modemLoopHits < 160 {
 				modemLoopHits++
 				fmt.Printf("modem loop %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X rx=%d stage=%d\n",
@@ -470,8 +482,11 @@ func main() {
 			}
 			if (cpu.PC == 0x802C84DC || cpu.PC == 0x802C84E8 || cpu.PC == 0x802C84F4 || cpu.PC == 0x802C8500 || cpu.PC == 0x802C8510 || cpu.PC == 0x802C8518) && currentWaitHits < 120 {
 				currentWaitHits++
-				fmt.Printf("current wait %02d step=%d PC=0x%08X inst=0x%08X b224E=0x%02X b2240=0x%02X v0=0x%016X a0=0x%016X ra=0x%016X\n",
-					currentWaitHits, step, cpu.PC, bus.Read32(cpu.PC), bus.RAM[0x224E], bus.RAM[0x2240], cpu.Regs[2], cpu.Regs[4], cpu.Regs[31])
+				fmt.Printf("current wait %02d step=%d PC=0x%08X inst=0x%08X b224E=0x%02X b2240=0x%02X v0=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X ra=0x%016X\n",
+					currentWaitHits, step, cpu.PC, bus.Read32(cpu.PC), bus.RAM[0x224E], bus.RAM[0x2240], cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[31])
+				if currentWaitHits == 1 {
+					printCodeRange(bus, 0x802C84C0, 0x802C8540, "current wait")
+				}
 				if forceBootEventGate && currentWaitHits == 12 {
 					bus.RAM[0x224E] = 1
 					fmt.Printf("forced b224E=1 at step=%d\n", step)
@@ -629,6 +644,11 @@ func main() {
 		fmt.Printf("Final dispatcher masks=%08X,%08X,%08X,%08X,%08X cbs=%08X,%08X,%08X,%08X,%08X\n",
 			binary.BigEndian.Uint32(bus.RAM[0x1430:]), binary.BigEndian.Uint32(bus.RAM[0x1438:]), binary.BigEndian.Uint32(bus.RAM[0x1440:]), binary.BigEndian.Uint32(bus.RAM[0x1448:]), binary.BigEndian.Uint32(bus.RAM[0x1450:]),
 			binary.BigEndian.Uint32(bus.RAM[0x17B4:]), binary.BigEndian.Uint32(bus.RAM[0x17BC:]), binary.BigEndian.Uint32(bus.RAM[0x17C4:]), binary.BigEndian.Uint32(bus.RAM[0x17CC:]), binary.BigEndian.Uint32(bus.RAM[0x17D4:]))
+		printStoreImmRefs(bus, 0x224E, 16)
+		printJALRefs(bus, 0x802C7464, 16)
+		printCodeRange(bus, 0x802C66F0, 0x802C6850, "gate caller")
+		printCodeRange(bus, 0x802A9BC0, 0x802A9C30, "gate cond")
+		printCodeRange(bus, 0x802C72D0, 0x802C7500, "gate setter")
 		ptr := binary.BigEndian.Uint32(bus.RAM[0x1C90:])
 		fmt.Printf("Final parser ptr=0x%08X around=%q\n", ptr, previewRAMString(bus, (ptr-96)&0x1FFFFFFF, 240))
 		printRangeSummary(bus, 0x00400000, 0x00100000, "final video-ish 0x80400000")
@@ -779,6 +799,36 @@ func printEventCallbacks(bus *Bus, table uint32, size uint32) {
 		printed++
 		if printed >= 16 {
 			return
+		}
+	}
+}
+
+func printStoreImmRefs(bus *Bus, imm uint32, limit int) {
+	printed := 0
+	for off := uint32(0x200000); off+3 < RAM_SIZE; off += 4 {
+		w := binary.BigEndian.Uint32(bus.RAM[off:])
+		op := w >> 26
+		if w&0xFFFF == imm && (op == 0x28 || op == 0x29 || op == 0x2B) {
+			fmt.Printf("Final store imm 0x%04X at PC=0x%08X inst=0x%08X\n", imm, 0x80000000|off, w)
+			printed++
+			if printed >= limit {
+				return
+			}
+		}
+	}
+}
+
+func printJALRefs(bus *Bus, target uint32, limit int) {
+	want := (target >> 2) & 0x03FFFFFF
+	printed := 0
+	for off := uint32(0x200000); off+3 < RAM_SIZE; off += 4 {
+		w := binary.BigEndian.Uint32(bus.RAM[off:])
+		if w>>26 == 3 && w&0x03FFFFFF == want {
+			fmt.Printf("Final JAL ref target=0x%08X at PC=0x%08X inst=0x%08X\n", target, 0x80000000|off, w)
+			printed++
+			if printed >= limit {
+				return
+			}
 		}
 	}
 }
