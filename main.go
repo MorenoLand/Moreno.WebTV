@@ -103,9 +103,13 @@ func main() {
 		gateQueueCallerHits := 0
 		currentWaitHits := 0
 		bootGateHits := 0
+		bootGateSetterHits := 0
+		bootGateSetterUntil := 0
 		bootGateCodeDumped := false
 		bootListHits := 0
 		bootListPCs := make(map[uint32]bool)
+		gateDecisionHits := 0
+		gateDecisionDumped := false
 		modemLoopHits := 0
 		modemCoreHits := 0
 		modemCodeDumped := false
@@ -453,7 +457,7 @@ func main() {
 				fmt.Printf("current task %02d step=%d PC=0x%08X glob=0x%08X flag1909=0x%02X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
 					currentTaskHits, step, cpu.PC, glob, bus.RAM[0x1909], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
 			}
-			if (cpu.PC == 0x802C66B4 || cpu.PC == 0x802C66BC || cpu.PC == 0x802C66D0 || cpu.PC == 0x802C66E8 || cpu.PC == 0x802C6700 || cpu.PC == 0x802C6724 || cpu.PC == 0x802C672C || cpu.PC == 0x802C6734 || cpu.PC == 0x802C6748 || cpu.PC == 0x802C6750 || cpu.PC == 0x802C6768 || cpu.PC == 0x802C6770 || cpu.PC == 0x802C67B0 || cpu.PC == 0x802C67E0 || cpu.PC == 0x802C67E8 || cpu.PC == 0x802C67EC || cpu.PC == 0x802C67F4 || cpu.PC == 0x802C6800 || cpu.PC == 0x802C6820 || cpu.PC == 0x802C6828 || cpu.PC == 0x802C6830 || cpu.PC == 0x802C6834 || cpu.PC == 0x802C6838 || cpu.PC == 0x802C6848 || cpu.PC == 0x802C6858 || cpu.PC == 0x8022A198 || cpu.PC == 0x8022A19C || cpu.PC == 0x8022A1A8) && currentTaskTraceHits < 180 {
+			if (cpu.PC == 0x802C66B4 || cpu.PC == 0x802C66BC || cpu.PC == 0x802C66D0 || cpu.PC == 0x802C66E8 || cpu.PC == 0x802C6700 || cpu.PC == 0x802C6724 || cpu.PC == 0x802C672C || cpu.PC == 0x802C6734 || cpu.PC == 0x802C6748 || cpu.PC == 0x802C6750 || cpu.PC == 0x802C6768 || cpu.PC == 0x802C6770 || cpu.PC == 0x802C6798 || cpu.PC == 0x802C67B0 || cpu.PC == 0x802C67E0 || cpu.PC == 0x802C67E8 || cpu.PC == 0x802C67EC || cpu.PC == 0x802C67F4 || cpu.PC == 0x802C6800 || cpu.PC == 0x802C6808 || cpu.PC == 0x802C6820 || cpu.PC == 0x802C6828 || cpu.PC == 0x802C6830 || cpu.PC == 0x802C6834 || cpu.PC == 0x802C6838 || cpu.PC == 0x802C683C || cpu.PC == 0x802C6848 || cpu.PC == 0x802C6858 || cpu.PC == 0x802C6C84 || cpu.PC == 0x8022A198 || cpu.PC == 0x8022A19C || cpu.PC == 0x8022A1A8) && currentTaskTraceHits < 180 {
 				currentTaskTraceHits++
 				fmt.Printf("current path %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
 					currentTaskTraceHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
@@ -537,6 +541,17 @@ func main() {
 					printCodeRange(bus, 0x802B3F80, 0x802B42A0, "boot gate callee")
 				}
 			}
+			if cpu.PC == 0x802C7464 && bootGateSetterHits == 0 {
+				bootGateSetterUntil = step + 2000
+			}
+			if step < bootGateSetterUntil && bootGateSetterHits < 300 {
+				bootGateSetterHits++
+				fmt.Printf("boot gate setter %02d step=%d PC=0x%08X inst=0x%08X b224E=0x%02X b2240=0x%02X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X\n",
+					bootGateSetterHits, step, cpu.PC, bus.Read32(cpu.PC), bus.RAM[0x224E], bus.RAM[0x2240], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31])
+				if bootGateSetterHits == 1 {
+					printCodeRange(bus, 0x802C7460, 0x802C74D0, "boot gate setter")
+				}
+			}
 			if cpu.PC >= 0x802B40F0 && cpu.PC < 0x802B4140 && bootListHits < 160 {
 				bootListHits++
 				fmt.Printf("boot list %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X\n",
@@ -546,6 +561,15 @@ func main() {
 				bootListPCs[cpu.PC] = true
 				fmt.Printf("list pc step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X g1e74=0x%08X\n",
 					step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E74:]))
+			}
+			if step > 54_000_000 && cpu.PC >= 0x80229BE8 && cpu.PC < 0x80229C80 && gateDecisionHits < 120 {
+				gateDecisionHits++
+				fmt.Printf("gate decision %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X ra=0x%016X\n",
+					gateDecisionHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[31])
+				if !gateDecisionDumped {
+					gateDecisionDumped = true
+					printCodeRange(bus, 0x80229BE8, 0x80229C80, "gate decision")
+				}
 			}
 			if cpu.PC >= 0x8024E760 && cpu.PC <= 0x8024E7A4 && bootListHits < 220 {
 				bootListHits++
