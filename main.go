@@ -110,6 +110,9 @@ func main() {
 		bootListPCs := make(map[uint32]bool)
 		gateDecisionHits := 0
 		gateDecisionDumped := false
+		gateListBuildHits := 0
+		gateListBuildDumped := false
+		gateInsertHits := 0
 		modemLoopHits := 0
 		modemCoreHits := 0
 		modemCodeDumped := false
@@ -569,6 +572,23 @@ func main() {
 				if !gateDecisionDumped {
 					gateDecisionDumped = true
 					printCodeRange(bus, 0x80229BE8, 0x80229C80, "gate decision")
+				}
+			}
+			if cpu.PC >= 0x802C3280 && cpu.PC < 0x802C3310 && gateListBuildHits < 160 {
+				gateListBuildHits++
+				fmt.Printf("gate list build %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
+					gateListBuildHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
+				if !gateListBuildDumped {
+					gateListBuildDumped = true
+					printCodeRange(bus, 0x802C3280, 0x802C3310, "gate list build")
+				}
+			}
+			if cpu.PC >= 0x80229B70 && cpu.PC < 0x80229BE0 && gateInsertHits < 120 {
+				a0p := uint32(cpu.Regs[4]) & 0x1FFFFFFF
+				if a0p >= 0x7E900 && a0p < 0x7EA00 {
+					gateInsertHits++
+					fmt.Printf("gate insert %03d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X\n",
+						gateInsertHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31])
 				}
 			}
 			if cpu.PC >= 0x8024E760 && cpu.PC <= 0x8024E7A4 && bootListHits < 220 {
