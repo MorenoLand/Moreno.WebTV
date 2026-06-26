@@ -332,7 +332,7 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 
 func (b *Bus) queueModemRX(data []byte) {
 	b.ModemRX = append(b.ModemRX, data...)
-	b.Asic.DevIntStat |= 1
+	b.Asic.DevIntStat |= 4
 	b.Asic.BusIntStat |= BUS_INT_DEVICE
 }
 
