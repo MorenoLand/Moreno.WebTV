@@ -288,7 +288,7 @@ func (b *Bus) modemRead8(off uint32) uint8 {
 		v = 0x20
 	case 0x18:
 		if len(b.ModemRX) != 0 {
-			v = 1
+			v = 0x80
 		}
 	default:
 		v = 0
