@@ -93,6 +93,8 @@ func main() {
 		schedulerDispatchHits := 0
 		currentTaskHits := 0
 		currentTaskTraceHits := 0
+		gateFlagTraceHits := 0
+		gateFlagFuncHits := 0
 		currentWaitHits := 0
 		bootGateHits := 0
 		bootGateCodeDumped := false
@@ -444,10 +446,31 @@ func main() {
 				fmt.Printf("current task %02d step=%d PC=0x%08X glob=0x%08X flag1909=0x%02X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
 					currentTaskHits, step, cpu.PC, glob, bus.RAM[0x1909], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
 			}
-			if (cpu.PC == 0x802C66B4 || cpu.PC == 0x802C66BC || cpu.PC == 0x802C66D0 || cpu.PC == 0x802C66E8 || cpu.PC == 0x802C6700 || cpu.PC == 0x802C6724 || cpu.PC == 0x802C672C || cpu.PC == 0x802C6734 || cpu.PC == 0x802C6748 || cpu.PC == 0x802C6750 || cpu.PC == 0x802C6768 || cpu.PC == 0x802C6770 || cpu.PC == 0x802C67B0 || cpu.PC == 0x802C67E0 || cpu.PC == 0x802C6820 || cpu.PC == 0x802C6830 || cpu.PC == 0x802C6848 || cpu.PC == 0x802C6858 || cpu.PC == 0x8022A198 || cpu.PC == 0x8022A19C || cpu.PC == 0x8022A1A8) && currentTaskTraceHits < 160 {
+			if (cpu.PC == 0x802C66B4 || cpu.PC == 0x802C66BC || cpu.PC == 0x802C66D0 || cpu.PC == 0x802C66E8 || cpu.PC == 0x802C6700 || cpu.PC == 0x802C6724 || cpu.PC == 0x802C672C || cpu.PC == 0x802C6734 || cpu.PC == 0x802C6748 || cpu.PC == 0x802C6750 || cpu.PC == 0x802C6768 || cpu.PC == 0x802C6770 || cpu.PC == 0x802C67B0 || cpu.PC == 0x802C67E0 || cpu.PC == 0x802C67E8 || cpu.PC == 0x802C67EC || cpu.PC == 0x802C67F4 || cpu.PC == 0x802C6800 || cpu.PC == 0x802C6820 || cpu.PC == 0x802C6828 || cpu.PC == 0x802C6830 || cpu.PC == 0x802C6834 || cpu.PC == 0x802C6838 || cpu.PC == 0x802C6848 || cpu.PC == 0x802C6858 || cpu.PC == 0x8022A198 || cpu.PC == 0x8022A19C || cpu.PC == 0x8022A1A8) && currentTaskTraceHits < 180 {
 				currentTaskTraceHits++
 				fmt.Printf("current path %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
 					currentTaskTraceHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
+			}
+			if (cpu.PC == 0x802C67E8 || cpu.PC == 0x802C67EC || cpu.PC == 0x802C67F4 || cpu.PC == 0x802C6800 || cpu.PC == 0x802C6808 || cpu.PC == 0x802C6828 || cpu.PC == 0x802C6830 || cpu.PC == 0x802C6834 || cpu.PC == 0x802C6838) && gateFlagTraceHits < 80 {
+				gateFlagTraceHits++
+				s0p := uint32(cpu.Regs[16]) & 0x1FFFFFFF
+				s1p := uint32(cpu.Regs[17]) & 0x1FFFFFFF
+				s0c4, s0c8, s0cc, s1c4 := uint32(0), uint32(0), uint32(0), uint32(0)
+				if s0p+0x3CF < uint32(len(bus.RAM)) {
+					s0c4 = binary.BigEndian.Uint32(bus.RAM[s0p+0x3C4:])
+					s0c8 = binary.BigEndian.Uint32(bus.RAM[s0p+0x3C8:])
+					s0cc = binary.BigEndian.Uint32(bus.RAM[s0p+0x3CC:])
+				}
+				if s1p+0x3C7 < uint32(len(bus.RAM)) {
+					s1c4 = binary.BigEndian.Uint32(bus.RAM[s1p+0x3C4:])
+				}
+				fmt.Printf("gate flags %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X s0+3C4=%08X s0+3C8=%08X s0+3CC=%08X s1+3C4=%08X g17A0=%08X\n",
+					gateFlagTraceHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], s0c4, s0c8, s0cc, s1c4, binary.BigEndian.Uint32(bus.RAM[0x17A0:]))
+			}
+			if cpu.PC >= 0x802C5144 && cpu.PC < 0x802C5220 && gateFlagFuncHits < 80 {
+				gateFlagFuncHits++
+				fmt.Printf("gate flag func %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X g2170=%08X g2174=%08X g217C=%08X ra=0x%016X\n",
+					gateFlagFuncHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], binary.BigEndian.Uint32(bus.RAM[0x2170:]), binary.BigEndian.Uint32(bus.RAM[0x2174:]), binary.BigEndian.Uint32(bus.RAM[0x217C:]), cpu.Regs[31])
 			}
 			if (cpu.PC == 0x802C6798 || cpu.PC == 0x802C6808 || cpu.PC == 0x802C683C || cpu.PC == 0x802C6C84) && currentTaskTraceHits < 200 {
 				currentTaskTraceHits++
@@ -646,6 +669,7 @@ func main() {
 			binary.BigEndian.Uint32(bus.RAM[0x17B4:]), binary.BigEndian.Uint32(bus.RAM[0x17BC:]), binary.BigEndian.Uint32(bus.RAM[0x17C4:]), binary.BigEndian.Uint32(bus.RAM[0x17CC:]), binary.BigEndian.Uint32(bus.RAM[0x17D4:]))
 		printStoreImmRefs(bus, 0x224E, 16)
 		printJALRefs(bus, 0x802C7464, 16)
+		printCodeRange(bus, 0x802C5100, 0x802C5220, "gate flags func")
 		printCodeRange(bus, 0x802C66F0, 0x802C6850, "gate caller")
 		printCodeRange(bus, 0x802A9BC0, 0x802A9C30, "gate cond")
 		printCodeRange(bus, 0x802C72D0, 0x802C7500, "gate setter")
