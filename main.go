@@ -91,6 +91,9 @@ func main() {
 		interruptHelperHits := 0
 		idleBlockHits := 0
 		schedulerDispatchHits := 0
+		timerSchedBodyHits := 0
+		schedCallbackHits := 0
+		timerIrqCallbackHits := 0
 		currentTaskHits := 0
 		currentTaskTraceHits := 0
 		gateFlagTraceHits := 0
@@ -586,6 +589,26 @@ func main() {
 				if schedulerDispatchHits == 1 {
 					printCodeRange(bus, 0x8022A600, 0x8022A720, "timer sched")
 					dumpRAMRange(bus, 0x0022A600, 0x200, "debug_8022a600.bin")
+				}
+			}
+			if cpu.PC >= 0x8022A600 && cpu.PC < 0x8022A6A0 && timerSchedBodyHits < 140 && (timerSchedBodyHits < 40 || step > 500_000_000) {
+				timerSchedBodyHits++
+				head := binary.BigEndian.Uint32(bus.RAM[0x18F0:])
+				glob := binary.BigEndian.Uint32(bus.RAM[0x1900:])
+				fmt.Printf("timer sched body %03d step=%d PC=0x%08X inst=0x%08X Count=0x%08X Compare=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X head=0x%08X glob=0x%08X\n",
+					timerSchedBodyHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.COP0[Count], cpu.COP0[Compare], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], head, glob)
+			}
+			if (cpu.PC == 0x8022A7A4 || cpu.PC == 0x802C6680 || cpu.PC == 0x80234F20 || cpu.PC == 0x802B4480) && schedCallbackHits < 80 {
+				schedCallbackHits++
+				fmt.Printf("sched callback %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
+					schedCallbackHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
+			}
+			if cpu.PC >= 0x802112F0 && cpu.PC < 0x80211330 && timerIrqCallbackHits < 120 {
+				timerIrqCallbackHits++
+				fmt.Printf("timer irq cb %03d step=%d PC=0x%08X inst=0x%08X Count=0x%08X Compare=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X head=0x%08X glob=0x%08X\n",
+					timerIrqCallbackHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.COP0[Count], cpu.COP0[Compare], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x18F0:]), binary.BigEndian.Uint32(bus.RAM[0x1900:]))
+				if timerIrqCallbackHits == 1 {
+					printCodeRange(bus, 0x802112E0, 0x80211380, "timer irq cb")
 				}
 			}
 			if cpu.PC == 0x8020912C && !idleLoopReported {
