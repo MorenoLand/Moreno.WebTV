@@ -116,7 +116,7 @@ func main() {
 		schedUnblocked := false
 		gateSetterPatched := false
 		gateQueueWord := binary.BigEndian.Uint32(bus.RAM[0x80A8C:])
-		for step := 0; step < 500_000_000; step++ {
+		for step := 0; step < 650_000_000; step++ {
 			if step > 38_000_000 {
 				binary.BigEndian.PutUint32(bus.RAM[0x2730:], uint32(bus.Asic.Cycles/100000))
 			}
@@ -698,6 +698,7 @@ func main() {
 		if bus.Asic.VIDNStart&0x1FFFFFFF < RAM_SIZE {
 			writeDebugFrameCandidates(bus, bus.Asic.VIDNStart&0x1FFFFFFF, 0x00100000)
 		}
+		writeDebugFrameCandidates(bus, 0x00400000, 0x00100000)
 		dumpRAMRange(bus, 0x0022A000, 0x900, "debug_8022a000.bin")
 		dumpRAMRange(bus, 0x002AD000, 0x700, "debug_802ad000.bin")
 		dumpRAMRange(bus, 0x002B4000, 0x900, "debug_802b4000.bin")
@@ -898,8 +899,8 @@ func writeDebugFrameCandidates(bus *Bus, base uint32, size uint32) {
 	if first > 0xE0000 {
 		first = 0xE0000
 	}
-	writeGray4PNG(bus.RAM[base+first:], 640, 400, "debug_frame_4bpp_640x400.png")
-	writeGray8PNG(bus.RAM[base+first:], 512, 256, "debug_frame_8bpp_512x256.png")
+	writeGray4PNG(bus.RAM[base+first:], 640, 400, fmt.Sprintf("debug_frame_%08X_4bpp_640x400.png", base+first))
+	writeGray8PNG(bus.RAM[base+first:], 512, 256, fmt.Sprintf("debug_frame_%08X_8bpp_512x256.png", base+first))
 	fmt.Printf("Debug frames written from RAM 0x%08X\n", base+first)
 }
 
