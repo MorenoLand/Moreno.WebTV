@@ -467,10 +467,10 @@ func main() {
 				fmt.Printf("gate flags %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X s0+3C4=%08X s0+3C8=%08X s0+3CC=%08X s1+3C4=%08X g17A0=%08X\n",
 					gateFlagTraceHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], s0c4, s0c8, s0cc, s1c4, binary.BigEndian.Uint32(bus.RAM[0x17A0:]))
 			}
-			if cpu.PC >= 0x802C5144 && cpu.PC < 0x802C5220 && gateFlagFuncHits < 80 {
+			if cpu.PC >= 0x802C5244 && cpu.PC < 0x802C5320 && gateFlagFuncHits < 80 {
 				gateFlagFuncHits++
-				fmt.Printf("gate flag func %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X g2170=%08X g2174=%08X g217C=%08X ra=0x%016X\n",
-					gateFlagFuncHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], binary.BigEndian.Uint32(bus.RAM[0x2170:]), binary.BigEndian.Uint32(bus.RAM[0x2174:]), binary.BigEndian.Uint32(bus.RAM[0x217C:]), cpu.Regs[31])
+				fmt.Printf("gate flag func %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X g2170=%08X g2174=%08X g2178=%08X g217C=%08X ra=0x%016X\n",
+					gateFlagFuncHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], binary.BigEndian.Uint32(bus.RAM[0x2170:]), binary.BigEndian.Uint32(bus.RAM[0x2174:]), binary.BigEndian.Uint32(bus.RAM[0x2178:]), binary.BigEndian.Uint32(bus.RAM[0x217C:]), cpu.Regs[31])
 			}
 			if (cpu.PC == 0x802C6798 || cpu.PC == 0x802C6808 || cpu.PC == 0x802C683C || cpu.PC == 0x802C6C84) && currentTaskTraceHits < 200 {
 				currentTaskTraceHits++
@@ -669,7 +669,8 @@ func main() {
 			binary.BigEndian.Uint32(bus.RAM[0x17B4:]), binary.BigEndian.Uint32(bus.RAM[0x17BC:]), binary.BigEndian.Uint32(bus.RAM[0x17C4:]), binary.BigEndian.Uint32(bus.RAM[0x17CC:]), binary.BigEndian.Uint32(bus.RAM[0x17D4:]))
 		printStoreImmRefs(bus, 0x224E, 16)
 		printJALRefs(bus, 0x802C7464, 16)
-		printCodeRange(bus, 0x802C5100, 0x802C5220, "gate flags func")
+		printJALRefs(bus, 0x802C52A4, 16)
+		printCodeRange(bus, 0x802C5240, 0x802C5320, "gate flags func")
 		printCodeRange(bus, 0x802C66F0, 0x802C6850, "gate caller")
 		printCodeRange(bus, 0x802A9BC0, 0x802A9C30, "gate cond")
 		printCodeRange(bus, 0x802C72D0, 0x802C7500, "gate setter")
