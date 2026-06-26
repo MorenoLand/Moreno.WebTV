@@ -115,6 +115,10 @@ func main() {
 		gateListBuildHits := 0
 		gateListBuildDumped := false
 		gateInsertHits := 0
+		key2InsertHits := 0
+		key2LookupHits := 0
+		reg2004ReadHits := 0
+		reg2004ReadUntil := 0
 		kseg2AllocHits := 0
 		kseg2AllocDumped := false
 		modemLoopHits := 0
@@ -594,6 +598,28 @@ func main() {
 					printCodeRange(bus, 0x80229BE8, 0x80229C80, "gate decision")
 				}
 			}
+			if cpu.PC == 0x80229BE8 && cpu.Regs[5] == 2 && key2LookupHits < 80 {
+				key2LookupHits++
+				a0p := uint32(cpu.Regs[4]) & 0x1FFFFFFF
+				w0, w4, w8 := uint32(0), uint32(0), uint32(0)
+				if a0p+11 < uint32(len(bus.RAM)) {
+					w0 = binary.BigEndian.Uint32(bus.RAM[a0p:])
+					w4 = binary.BigEndian.Uint32(bus.RAM[a0p+4:])
+					w8 = binary.BigEndian.Uint32(bus.RAM[a0p+8:])
+				}
+				fmt.Printf("key2 lookup %02d step=%d a0=0x%016X head=%08X/%08X/%08X s0=0x%016X s1=0x%016X ra=0x%016X\n",
+					key2LookupHits, step, cpu.Regs[4], w0, w4, w8, cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
+			}
+			if cpu.PC == 0x80229E10 && (uint32(cpu.Regs[4])&0x1FFFFFFF) == 0x2004 {
+				reg2004ReadUntil = step + 80
+			}
+			if step < reg2004ReadUntil && reg2004ReadHits < 160 {
+				if cpu.PC >= 0x80229E10 && cpu.PC < 0x80229E80 {
+					reg2004ReadHits++
+					fmt.Printf("reg2004 helper %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X ram2004=0x%08X\n",
+						reg2004ReadHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x2004:]))
+				}
+			}
 			if cpu.PC >= 0x802C3280 && cpu.PC < 0x802C3310 && gateListBuildHits < 160 {
 				gateListBuildHits++
 				fmt.Printf("gate list build %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X\n",
@@ -610,6 +636,11 @@ func main() {
 					fmt.Printf("gate insert %03d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X\n",
 						gateInsertHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31])
 				}
+			}
+			if cpu.PC >= 0x80229B70 && cpu.PC < 0x80229BE0 && cpu.Regs[17] == 2 && key2InsertHits < 80 {
+				key2InsertHits++
+				fmt.Printf("key2 insert %02d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X\n",
+					key2InsertHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31])
 			}
 			if cpu.PC >= 0x8024E760 && cpu.PC <= 0x8024E7A4 && bootListHits < 220 {
 				bootListHits++
