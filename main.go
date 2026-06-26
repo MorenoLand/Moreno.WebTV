@@ -92,6 +92,8 @@ func main() {
 		idleBlockHits := 0
 		schedulerDispatchHits := 0
 		timerSchedBodyHits := 0
+		lateCurrentDispatchHits := 0
+		lateExceptionExitHits := 0
 		schedCallbackHits := 0
 		timerIrqCallbackHits := 0
 		currentTaskHits := 0
@@ -581,6 +583,36 @@ func main() {
 				idleBlockHits++
 				fmt.Printf("idle block %02d step=%d PC=0x%08X inst=0x%08X Status=0x%08X Cause=0x%08X Count=0x%08X Compare=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X busStat=0x%08X busEn=0x%08X timStat=0x%08X timEn=0x%08X\n",
 					idleBlockHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.COP0[Status], cpu.COP0[Cause], cpu.COP0[Count], cpu.COP0[Compare], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31], bus.Asic.BusIntStat, bus.Asic.BusIntEnable, bus.Asic.TimIntStat, bus.Asic.TimIntEnable)
+			}
+			if step > 500_000_000 && cpu.PC >= 0x8022A180 && cpu.PC < 0x8022A220 && lateCurrentDispatchHits < 120 {
+				lateCurrentDispatchHits++
+				head := binary.BigEndian.Uint32(bus.RAM[0x18F0:])
+				glob := binary.BigEndian.Uint32(bus.RAM[0x1900:])
+				h0, h4, h8, hc, h10, h20 := uint32(0), uint32(0), uint32(0), uint32(0), uint32(0), uint32(0)
+				if head >= 0x80000000 && head < 0x80800000 {
+					off := head - 0x80000000
+					if off+0x24 <= uint32(len(bus.RAM)) {
+						h0 = binary.BigEndian.Uint32(bus.RAM[off:])
+						h4 = binary.BigEndian.Uint32(bus.RAM[off+4:])
+						h8 = binary.BigEndian.Uint32(bus.RAM[off+8:])
+						hc = binary.BigEndian.Uint32(bus.RAM[off+0xC:])
+						h10 = binary.BigEndian.Uint32(bus.RAM[off+0x10:])
+						h20 = binary.BigEndian.Uint32(bus.RAM[off+0x20:])
+					}
+				}
+				fmt.Printf("late current dispatch %03d step=%d PC=0x%08X inst=0x%08X Status=0x%08X Cause=0x%08X Count=0x%08X Compare=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X head=0x%08X glob=0x%08X h0=0x%08X h4=0x%08X h8=0x%08X hc=0x%08X h10=0x%08X h20=0x%08X r1909=0x%02X\n",
+					lateCurrentDispatchHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.COP0[Status], cpu.COP0[Cause], cpu.COP0[Count], cpu.COP0[Compare], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], head, glob, h0, h4, h8, hc, h10, h20, bus.RAM[0x1909])
+				if lateCurrentDispatchHits == 1 {
+					printCodeRange(bus, 0x8022A180, 0x8022A220, "late current dispatch")
+				}
+			}
+			if step > 500_000_000 && cpu.PC >= 0x80221A70 && cpu.PC < 0x80221AC0 && lateExceptionExitHits < 120 {
+				lateExceptionExitHits++
+				fmt.Printf("late exception exit %03d step=%d PC=0x%08X inst=0x%08X EPC=0x%08X epcInst=0x%08X Status=0x%08X Cause=0x%08X Count=0x%08X Compare=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X sp=0x%016X ra=0x%016X\n",
+					lateExceptionExitHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.COP0[EPC], bus.Read32(cpu.COP0[EPC]), cpu.COP0[Status], cpu.COP0[Cause], cpu.COP0[Count], cpu.COP0[Compare], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[29], cpu.Regs[31])
+				if lateExceptionExitHits == 1 {
+					printCodeRange(bus, 0x80221A70, 0x80221AC0, "late exception exit")
+				}
 			}
 			if cpu.PC >= 0x8022A680 && cpu.PC <= 0x8022A7C0 && schedulerDispatchHits < 120 {
 				schedulerDispatchHits++
