@@ -132,6 +132,8 @@ func main() {
 		modemCodeDumped := false
 		eventPushCallerHits := 0
 		eventPushFuncHits := 0
+		devicePtrFuncHits := 0
+		devicePtrCodeDumped := false
 		timeFuncHits := 0
 		schedulerCodeDumped := false
 		irqLoopHits := 0
@@ -548,6 +550,15 @@ func main() {
 				fmt.Printf("event push func hit %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X g1E74=%08X\n",
 					eventPushFuncHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E74:]))
 			}
+			if cpu.PC >= 0x80222E58 && cpu.PC < 0x80222F20 && devicePtrFuncHits < 160 {
+				devicePtrFuncHits++
+				fmt.Printf("device ptr func hit %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X low400=%08X low588=%08X\n",
+					devicePtrFuncHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x400:]), binary.BigEndian.Uint32(bus.RAM[0x588:]))
+				if !devicePtrCodeDumped {
+					devicePtrCodeDumped = true
+					printCodeRange(bus, 0x80222E58, 0x80222F20, "device ptr func")
+				}
+			}
 			if cpu.PC >= 0x80211260 && cpu.PC < 0x802112D0 && !newLoopDumped {
 				newLoopDumped = true
 				fmt.Printf("new loop step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X\n",
@@ -895,6 +906,13 @@ func main() {
 		printJALRefs(bus, 0x802C5EB0, 16)
 		printJALRefs(bus, 0x802C5ED0, 16)
 		printJALRefs(bus, 0x802C5EE0, 16)
+		printJALRefs(bus, 0x80222E58, 32)
+		printJALRefs(bus, 0x80222E68, 32)
+		printLoadImmRefs(bus, 0xA0000400, 32)
+		printAccessImmRefs(bus, 0x0188, 32)
+		printAccessImmRefs(bus, 0x018C, 32)
+		printAccessImmRefs(bus, 0x0190, 32)
+		printCodeRange(bus, 0x80222E20, 0x80223180, "device base func")
 		printCodeRange(bus, 0x802C5E80, 0x802C5F50, "event push func")
 		printLoadImmRefs(bus, 0x80234F20, 16)
 		printLoadImmRefs(bus, 0x802B4480, 16)
@@ -1066,6 +1084,21 @@ func printStoreImmRefs(bus *Bus, imm uint32, limit int) {
 		op := w >> 26
 		if w&0xFFFF == imm && (op == 0x28 || op == 0x29 || op == 0x2B) {
 			fmt.Printf("Final store imm 0x%04X at PC=0x%08X inst=0x%08X\n", imm, 0x80000000|off, w)
+			printed++
+			if printed >= limit {
+				return
+			}
+		}
+	}
+}
+
+func printAccessImmRefs(bus *Bus, imm uint32, limit int) {
+	printed := 0
+	for off := uint32(0x200000); off+3 < RAM_SIZE; off += 4 {
+		w := binary.BigEndian.Uint32(bus.RAM[off:])
+		op := w >> 26
+		if w&0xFFFF == imm && (op == 0x20 || op == 0x21 || op == 0x23 || op == 0x24 || op == 0x25 || op == 0x28 || op == 0x29 || op == 0x2B) {
+			fmt.Printf("Final access imm 0x%04X at PC=0x%08X op=0x%02X rs=%d rt=%d inst=0x%08X\n", imm, 0x80000000|off, op, (w>>21)&0x1F, (w>>16)&0x1F, w)
 			printed++
 			if printed >= limit {
 				return
