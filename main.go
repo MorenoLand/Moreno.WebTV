@@ -103,6 +103,7 @@ func main() {
 		gateFlagTraceHits := 0
 		gateFlagFuncHits := 0
 		gateQueueCallerHits := 0
+		gateQueueSetHits := 0
 		currentWaitHits := 0
 		bootGateHits := 0
 		bootGateSetterHits := 0
@@ -514,6 +515,11 @@ func main() {
 				fmt.Printf("gate flag func %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X g2170=%08X g2174=%08X g2178=%08X g217C=%08X ra=0x%016X\n",
 					gateFlagFuncHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], binary.BigEndian.Uint32(bus.RAM[0x2170:]), binary.BigEndian.Uint32(bus.RAM[0x2174:]), binary.BigEndian.Uint32(bus.RAM[0x2178:]), binary.BigEndian.Uint32(bus.RAM[0x217C:]), cpu.Regs[31])
 			}
+			if cpu.PC >= 0x802C52A4 && cpu.PC < 0x802C52E8 && gateQueueSetHits < 160 {
+				gateQueueSetHits++
+				fmt.Printf("gate queue set %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X q88=%08X q8C=%08X q90=%08X q94=%08X q98=%08X g2178=%08X ra=0x%016X\n",
+					gateQueueSetHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], binary.BigEndian.Uint32(bus.RAM[0x80A88:]), binary.BigEndian.Uint32(bus.RAM[0x80A8C:]), binary.BigEndian.Uint32(bus.RAM[0x80A90:]), binary.BigEndian.Uint32(bus.RAM[0x80A94:]), binary.BigEndian.Uint32(bus.RAM[0x80A98:]), binary.BigEndian.Uint32(bus.RAM[0x2178:]), cpu.Regs[31])
+			}
 			if (cpu.PC == 0x80234F50 || cpu.PC == 0x802B4490 || cpu.PC == 0x802C6800) && gateQueueCallerHits < 40 {
 				gateQueueCallerHits++
 				fmt.Printf("gate queue caller %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X q80A8C=%08X\n",
@@ -866,6 +872,8 @@ func main() {
 		printStoreImmRefs(bus, 0x224E, 16)
 		printJALRefs(bus, 0x802C7464, 16)
 		printJALRefs(bus, 0x802C52A4, 16)
+		printLoadImmRefs(bus, 0x80234F20, 16)
+		printLoadImmRefs(bus, 0x802B4480, 16)
 		printCodeRange(bus, 0x80234F20, 0x80234F80, "gate queue caller")
 		printCodeRange(bus, 0x802B4460, 0x802B44C0, "gate queue caller")
 		printCodeRange(bus, 0x802C5240, 0x802C5320, "gate flags func")
@@ -1049,6 +1057,27 @@ func printJALRefs(bus *Bus, target uint32, limit int) {
 		w := binary.BigEndian.Uint32(bus.RAM[off:])
 		if w>>26 == 3 && w&0x03FFFFFF == want {
 			fmt.Printf("Final JAL ref target=0x%08X at PC=0x%08X inst=0x%08X\n", target, 0x80000000|off, w)
+			printed++
+			if printed >= limit {
+				return
+			}
+		}
+	}
+}
+
+func printLoadImmRefs(bus *Bus, target uint32, limit int) {
+	printed := 0
+	hi := (target >> 16) & 0xFFFF
+	lo := target & 0xFFFF
+	for off := uint32(0x200000); off+7 < RAM_SIZE; off += 4 {
+		w0 := binary.BigEndian.Uint32(bus.RAM[off:])
+		w1 := binary.BigEndian.Uint32(bus.RAM[off+4:])
+		if w0>>26 != 0x0F || w0&0xFFFF != hi {
+			continue
+		}
+		rt := (w0 >> 16) & 0x1F
+		if ((w1>>26 == 0x0D || w1>>26 == 0x09) && ((w1>>21)&0x1F) == rt && ((w1>>16)&0x1F) == rt && w1&0xFFFF == lo) || (lo == 0 && w1 == 0) {
+			fmt.Printf("Final load imm ref target=0x%08X at PC=0x%08X inst0=0x%08X inst1=0x%08X\n", target, 0x80000000|off, w0, w1)
 			printed++
 			if printed >= limit {
 				return
