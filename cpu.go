@@ -95,6 +95,9 @@ func (c *CPU) Translate(vaddr uint32) (uint32, bool) {
 	if vaddr >= 0x80000000 && vaddr < 0xC0000000 {
 		return vaddr & 0x1FFFFFFF, true
 	}
+	if vaddr >= 0xC0000000 && vaddr < 0xC0000000+RAM_SIZE {
+		return vaddr & 0x1FFFFFFF, true
+	}
 	asid := c.COP0[EntryHi] & 0xFF
 	for i := 0; i < NumTLB; i++ {
 		e := &c.TLB[i]
@@ -694,7 +697,7 @@ func (c *CPU) execCOP0(rs, rt, rd, inst uint32) {
 	case 0x00: // MFC0
 		c.setReg32(rt, c.COP0[rd])
 	case 0x04: // MTC0
-		if false && (rd == Count || rd == Compare || (rd == Status && c.Steps > 38_000_000)) {
+		if false && (rd == Status || rd == EntryHi || rd == EntryLo0 || rd == EntryLo1 || rd == PageMask || rd == Index) {
 			fmt.Printf("MTC0 step=%d PC=0x%08X rd=%d old=0x%08X new=0x%08X Count=0x%08X Compare=0x%08X Cause=0x%08X Status=0x%08X a0=0x%08X ra=0x%08X\n",
 				c.Steps, c.excPC, rd, c.COP0[rd], uint32(c.Regs[rt]), c.COP0[Count], c.COP0[Compare], c.COP0[Cause], c.COP0[Status], uint32(c.Regs[4]), uint32(c.Regs[31]))
 		}

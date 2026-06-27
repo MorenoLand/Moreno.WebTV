@@ -30,6 +30,16 @@ func TestLoadTLBMissDoesNotWriteRegister(t *testing.T) {
 	}
 }
 
+func TestFirmwareKSEG2RAMAlias(t *testing.T) {
+	bus := NewBus()
+	cpu := NewCPU(bus)
+
+	phys, ok := cpu.Translate(0xC007E960)
+	if !ok || phys != 0x0007E960 {
+		t.Fatalf("KSEG2 RAM alias phys=0x%08X ok=%v, want 0x0007E960 true", phys, ok)
+	}
+}
+
 func TestERETRestoresEPCAndClearsEXL(t *testing.T) {
 	bus := NewBus()
 	cpu := NewCPU(bus)
