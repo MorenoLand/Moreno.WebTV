@@ -120,6 +120,8 @@ func main() {
 		gateListHelperDumped := false
 		gateListBuildHits := 0
 		gateListBuildDumped := false
+		gateInsertCallerHits := 0
+		gateInsertCallerDumped := false
 		gateInsertHits := 0
 		key2InsertHits := 0
 		key2LookupHits := 0
@@ -704,6 +706,15 @@ func main() {
 				if !gateListBuildDumped {
 					gateListBuildDumped = true
 					printCodeRange(bus, 0x802C3280, 0x802C3310, "gate list build")
+				}
+			}
+			if step > 38_500_000 && cpu.PC >= 0x80229A60 && cpu.PC < 0x80229B70 && gateInsertCallerHits < 220 {
+				gateInsertCallerHits++
+				fmt.Printf("gate insert caller %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X s4=0x%016X ra=0x%016X\n",
+					gateInsertCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[20], cpu.Regs[31])
+				if !gateInsertCallerDumped {
+					gateInsertCallerDumped = true
+					printCodeRange(bus, 0x80229A60, 0x80229B70, "gate insert caller")
 				}
 			}
 			if cpu.PC >= 0x80229B70 && cpu.PC < 0x80229BE0 && gateInsertHits < 120 {

@@ -31,3 +31,11 @@ func TestEXLKernelLowRAMBypassesTLBWhenBEVCleared(t *testing.T) {
 		t.Fatalf("EXL low RAM write stored 0x%08X, want 0x12345678", got)
 	}
 }
+
+func TestSoloProbeByte(t *testing.T) {
+	bus := NewBus()
+
+	if got := bus.Read8(0xA4FFFFF3); got != 2 {
+		t.Fatalf("SOLO probe byte got 0x%02X, want 0x02", got)
+	}
+}

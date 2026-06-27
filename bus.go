@@ -100,6 +100,9 @@ func (b *Bus) Read8(addr uint32) uint8 {
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		return b.modemRead8(p - 0x1E000000)
 	}
+	if p == 0x04FFFFF3 {
+		return 2
+	}
 	if p >= 0x04000000 && p < 0x05000000 {
 		return uint8(b.Asic.Read(p & 0xFFFF))
 	}
