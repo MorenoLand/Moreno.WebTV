@@ -116,6 +116,8 @@ func main() {
 		gateDecisionDumped := false
 		gateListCallerHits := 0
 		gateListCallerDumped := false
+		gateListHelperHits := 0
+		gateListHelperDumped := false
 		gateListBuildHits := 0
 		gateListBuildDumped := false
 		gateInsertHits := 0
@@ -641,6 +643,15 @@ func main() {
 				if !gateListCallerDumped {
 					gateListCallerDumped = true
 					printCodeRange(bus, 0x802C3080, 0x802C3160, "gate list caller")
+				}
+			}
+			if cpu.PC >= 0x80229D40 && cpu.PC < 0x80229E10 && gateListHelperHits < 160 {
+				gateListHelperHits++
+				fmt.Printf("gate list helper %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X ram2004=0x%08X\n",
+					gateListHelperHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x2004:]))
+				if !gateListHelperDumped {
+					gateListHelperDumped = true
+					printCodeRange(bus, 0x80229D40, 0x80229E10, "gate list helper")
 				}
 			}
 			if cpu.PC == 0x80229BE8 && cpu.Regs[5] == 2 && key2LookupHits < 80 {
