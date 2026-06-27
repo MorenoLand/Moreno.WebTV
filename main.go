@@ -130,6 +130,7 @@ func main() {
 		modemLoopHits := 0
 		modemCoreHits := 0
 		modemCodeDumped := false
+		eventPushCallerHits := 0
 		timeFuncHits := 0
 		schedulerCodeDumped := false
 		irqLoopHits := 0
@@ -536,6 +537,11 @@ func main() {
 				fmt.Printf("modem loop %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X rx=%d stage=%d\n",
 					modemLoopHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], len(bus.ModemRX), bus.ModemStage)
 			}
+			if (cpu.PC == 0x8020DCA4 || cpu.PC == 0x8020DF18 || cpu.PC == 0x8020E0A4 || cpu.PC == 0x80233750 || cpu.PC == 0x802C5F00 || cpu.PC == 0x802C5F2C) && eventPushCallerHits < 80 {
+				eventPushCallerHits++
+				fmt.Printf("event push caller %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X g1E74=%08X\n",
+					eventPushCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E74:]))
+			}
 			if cpu.PC >= 0x80211260 && cpu.PC < 0x802112D0 && !newLoopDumped {
 				newLoopDumped = true
 				fmt.Printf("new loop step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X\n",
@@ -871,8 +877,11 @@ func main() {
 			binary.BigEndian.Uint32(bus.RAM[0x1430:]), binary.BigEndian.Uint32(bus.RAM[0x1438:]), binary.BigEndian.Uint32(bus.RAM[0x1440:]), binary.BigEndian.Uint32(bus.RAM[0x1448:]), binary.BigEndian.Uint32(bus.RAM[0x1450:]),
 			binary.BigEndian.Uint32(bus.RAM[0x17B4:]), binary.BigEndian.Uint32(bus.RAM[0x17BC:]), binary.BigEndian.Uint32(bus.RAM[0x17C4:]), binary.BigEndian.Uint32(bus.RAM[0x17CC:]), binary.BigEndian.Uint32(bus.RAM[0x17D4:]))
 		printStoreImmRefs(bus, 0x224E, 16)
+		printStoreImmRefs(bus, 0x1E70, 16)
+		printStoreImmRefs(bus, 0x1E74, 16)
 		printJALRefs(bus, 0x802C7464, 16)
 		printJALRefs(bus, 0x802C52A4, 16)
+		printJALRefs(bus, 0x802B417C, 32)
 		printLoadImmRefs(bus, 0x80234F20, 16)
 		printLoadImmRefs(bus, 0x802B4480, 16)
 		printCodeRange(bus, 0x80234F20, 0x80234F80, "gate queue caller")
