@@ -114,6 +114,8 @@ func main() {
 		bootListPCs := make(map[uint32]bool)
 		gateDecisionHits := 0
 		gateDecisionDumped := false
+		gateListCallerHits := 0
+		gateListCallerDumped := false
 		gateListBuildHits := 0
 		gateListBuildDumped := false
 		gateInsertHits := 0
@@ -630,6 +632,15 @@ func main() {
 				if !gateDecisionDumped {
 					gateDecisionDumped = true
 					printCodeRange(bus, 0x80229BE8, 0x80229C80, "gate decision")
+				}
+			}
+			if cpu.PC >= 0x802C3080 && cpu.PC < 0x802C3160 && gateListCallerHits < 160 {
+				gateListCallerHits++
+				fmt.Printf("gate list caller %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X\n",
+					gateListCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31])
+				if !gateListCallerDumped {
+					gateListCallerDumped = true
+					printCodeRange(bus, 0x802C3080, 0x802C3160, "gate list caller")
 				}
 			}
 			if cpu.PC == 0x80229BE8 && cpu.Regs[5] == 2 && key2LookupHits < 80 {
