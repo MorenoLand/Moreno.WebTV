@@ -119,6 +119,10 @@ func main() {
 		key2LookupHits := 0
 		reg2004ReadHits := 0
 		reg2004ReadUntil := 0
+		postGateFaultHits := 0
+		postGateFaultDumped := false
+		nullObjHelperHits := 0
+		nullObjHelperDumped := false
 		kseg2AllocHits := 0
 		kseg2AllocDumped := false
 		modemLoopHits := 0
@@ -618,6 +622,24 @@ func main() {
 					reg2004ReadHits++
 					fmt.Printf("reg2004 helper %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X ram2004=0x%08X\n",
 						reg2004ReadHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x2004:]))
+				}
+			}
+			if cpu.PC >= 0x8026A060 && cpu.PC < 0x8026A0E0 && postGateFaultHits < 120 {
+				postGateFaultHits++
+				fmt.Printf("post gate fault %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X\n",
+					postGateFaultHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31])
+				if !postGateFaultDumped {
+					postGateFaultDumped = true
+					printCodeRange(bus, 0x8026A060, 0x8026A0E0, "post gate fault")
+				}
+			}
+			if cpu.PC >= 0x80268E20 && cpu.PC < 0x80269130 && nullObjHelperHits < 240 {
+				nullObjHelperHits++
+				fmt.Printf("null obj helper %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X\n",
+					nullObjHelperHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31])
+				if !nullObjHelperDumped {
+					nullObjHelperDumped = true
+					printCodeRange(bus, 0x80268E20, 0x80269130, "null obj helper")
 				}
 			}
 			if cpu.PC >= 0x802C3280 && cpu.PC < 0x802C3310 && gateListBuildHits < 160 {
