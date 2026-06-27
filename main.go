@@ -131,6 +131,7 @@ func main() {
 		modemCoreHits := 0
 		modemCodeDumped := false
 		eventPushCallerHits := 0
+		eventPushFuncHits := 0
 		timeFuncHits := 0
 		schedulerCodeDumped := false
 		irqLoopHits := 0
@@ -542,6 +543,11 @@ func main() {
 				fmt.Printf("event push caller %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X g1E74=%08X\n",
 					eventPushCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E74:]))
 			}
+			if cpu.PC >= 0x802C5E84 && cpu.PC < 0x802C5F50 && eventPushFuncHits < 160 {
+				eventPushFuncHits++
+				fmt.Printf("event push func hit %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X g1E74=%08X\n",
+					eventPushFuncHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E74:]))
+			}
 			if cpu.PC >= 0x80211260 && cpu.PC < 0x802112D0 && !newLoopDumped {
 				newLoopDumped = true
 				fmt.Printf("new loop step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X\n",
@@ -882,6 +888,14 @@ func main() {
 		printJALRefs(bus, 0x802C7464, 16)
 		printJALRefs(bus, 0x802C52A4, 16)
 		printJALRefs(bus, 0x802B417C, 32)
+		printJALRefs(bus, 0x802C5EC0, 16)
+		printJALRefs(bus, 0x802C5E80, 16)
+		printJALRefs(bus, 0x802C5E90, 16)
+		printJALRefs(bus, 0x802C5EA0, 16)
+		printJALRefs(bus, 0x802C5EB0, 16)
+		printJALRefs(bus, 0x802C5ED0, 16)
+		printJALRefs(bus, 0x802C5EE0, 16)
+		printCodeRange(bus, 0x802C5E80, 0x802C5F50, "event push func")
 		printLoadImmRefs(bus, 0x80234F20, 16)
 		printLoadImmRefs(bus, 0x802B4480, 16)
 		printCodeRange(bus, 0x80234F20, 0x80234F80, "gate queue caller")
