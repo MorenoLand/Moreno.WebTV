@@ -643,6 +643,9 @@ func main() {
 				}
 				fmt.Printf("key2 lookup %02d step=%d a0=0x%016X head=%08X/%08X/%08X s0=0x%016X s1=0x%016X ra=0x%016X\n",
 					key2LookupHits, step, cpu.Regs[4], w0, w4, w8, cpu.Regs[16], cpu.Regs[17], cpu.Regs[31])
+				if key2LookupHits == 1 {
+					printListChain(bus, uint32(cpu.Regs[4]), "key2 list", 8)
+				}
 			}
 			if cpu.PC == 0x80229E10 && (uint32(cpu.Regs[4])&0x1FFFFFFF) == 0x2004 {
 				reg2004ReadUntil = step + 80
@@ -880,6 +883,7 @@ func main() {
 			binary.BigEndian.Uint32(bus.RAM[0x80A88:]), binary.BigEndian.Uint32(bus.RAM[0x80A8C:]), binary.BigEndian.Uint32(bus.RAM[0x80A90:]), binary.BigEndian.Uint32(bus.RAM[0x80A94:]), binary.BigEndian.Uint32(bus.RAM[0x80A98:]))
 		fmt.Printf("Final eventq 1E70=%08X 1E74=%08X ACB8=%08X ACC0=%08X ACC4=%08X\n",
 			binary.BigEndian.Uint32(bus.RAM[0x1E70:]), binary.BigEndian.Uint32(bus.RAM[0x1E74:]), binary.BigEndian.Uint32(bus.RAM[0xACB8:]), binary.BigEndian.Uint32(bus.RAM[0xACC0:]), binary.BigEndian.Uint32(bus.RAM[0xACC4:]))
+		printListChain(bus, 0x8007E930, "Final gate list", 8)
 		eventTable := binary.BigEndian.Uint32(bus.RAM[0x25D4:]) & 0x1FFFFFFF
 		if eventTable+0x60 < uint32(len(bus.RAM)) {
 			fmt.Printf("Final event table ptr=0x%08X e0=%08X/%08X e1=%08X/%08X e2=%08X/%08X e3=%08X/%08X\n",
@@ -1074,6 +1078,29 @@ func printEventCallbacks(bus *Bus, table uint32, size uint32) {
 		if printed >= 16 {
 			return
 		}
+	}
+}
+
+func printListChain(bus *Bus, ptr uint32, label string, limit int) {
+	p := ptr & 0x1FFFFFFF
+	if p+7 >= uint32(len(bus.RAM)) {
+		fmt.Printf("%s root=0x%08X out-of-range\n", label, ptr)
+		return
+	}
+	head := binary.BigEndian.Uint32(bus.RAM[p:])
+	meta := binary.BigEndian.Uint32(bus.RAM[p+4:])
+	fmt.Printf("%s root=0x%08X head=0x%08X meta=0x%08X\n", label, ptr, head, meta)
+	for i := 0; i < limit && head != 0; i++ {
+		np := head & 0x1FFFFFFF
+		if np+11 >= uint32(len(bus.RAM)) {
+			fmt.Printf("%s node[%d] ptr=0x%08X out-of-range\n", label, i, head)
+			return
+		}
+		next := binary.BigEndian.Uint32(bus.RAM[np:])
+		key := binary.BigEndian.Uint32(bus.RAM[np+4:])
+		val := binary.BigEndian.Uint32(bus.RAM[np+8:])
+		fmt.Printf("%s node[%d] ptr=0x%08X next=0x%08X key=0x%08X val=0x%08X\n", label, i, head, next, key, val)
+		head = next
 	}
 }
 
