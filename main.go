@@ -110,6 +110,7 @@ func main() {
 		bootGateSetterUntil := 0
 		bootGateCodeDumped := false
 		bootListHits := 0
+		bootListPathHits := 0
 		bootListPCs := make(map[uint32]bool)
 		gateDecisionHits := 0
 		gateDecisionDumped := false
@@ -589,10 +590,10 @@ func main() {
 					printCodeRange(bus, 0x802C7460, 0x802C74D0, "boot gate setter")
 				}
 			}
-			if cpu.PC >= 0x802B40F0 && cpu.PC < 0x802B4140 && bootListHits < 160 {
-				bootListHits++
-				fmt.Printf("boot list %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X\n",
-					bootListHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31])
+			if cpu.PC >= 0x802B40F0 && cpu.PC < 0x802B4140 && bootListPathHits < 200 {
+				bootListPathHits++
+				fmt.Printf("boot list %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X g1E70=%08X g1E74=%08X acb8=%08X\n",
+					bootListPathHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E70:]), binary.BigEndian.Uint32(bus.RAM[0x1E74:]), binary.BigEndian.Uint32(bus.RAM[0xACB8:]))
 			}
 			if cpu.PC >= 0x802B4000 && cpu.PC < 0x802B4800 && !bootListPCs[cpu.PC] && len(bootListPCs) < 240 {
 				bootListPCs[cpu.PC] = true
