@@ -963,9 +963,7 @@ func main() {
 		fmt.Printf("Final parser ptr=0x%08X around=%q\n", ptr, previewRAMString(bus, (ptr-96)&0x1FFFFFFF, 240))
 		printRangeSummary(bus, 0x00400000, 0x00100000, "final video-ish 0x80400000")
 		dumpRAMRange(bus, 0x00400000, 0x100000, "debug_video_80400000_final.bin")
-		if bus.Asic.VIDNStart&0x1FFFFFFF < RAM_SIZE {
-			writeDebugFrameCandidates(bus, bus.Asic.VIDNStart&0x1FFFFFFF, 0x00100000)
-		}
+		writeVideoFrameCandidates(bus)
 		writeDebugFrameCandidates(bus, 0x00400000, 0x00100000)
 		dumpRAMRange(bus, 0x0022A000, 0x900, "debug_8022a000.bin")
 		dumpRAMRange(bus, 0x002AD000, 0x700, "debug_802ad000.bin")
@@ -1231,6 +1229,18 @@ func writeDebugFrameCandidates(bus *Bus, base uint32, size uint32) {
 	fmt.Printf("Debug frames written from RAM 0x%08X\n", base+first)
 }
 
+func writeVideoFrameCandidates(bus *Bus) {
+	base := bus.Asic.VIDNStart & 0x1FFFFFFF
+	if base >= uint32(len(bus.RAM)) {
+		return
+	}
+	data := bus.RAM[base:]
+	writeGray4PNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_4bpp_640x400.png", base))
+	writeGray8PNG(data, 512, 256, fmt.Sprintf("debug_vid_nstart_%08X_8bpp_512x256.png", base))
+	writeRGB565PNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_rgb565_640x400.png", base))
+	fmt.Printf("Video frame candidates written from VID_NSTART RAM 0x%08X\n", base)
+}
+
 func writeGray4PNG(data []byte, w int, h int, path string) {
 	if len(data) < w*h/2 {
 		return
@@ -1259,6 +1269,23 @@ func writeGray8PNG(data []byte, w int, h int, path string) {
 		for x := 0; x < w; x++ {
 			c := data[y*w+x]
 			img.SetRGBA(x, y, color.RGBA{c, c, c, 0xFF})
+		}
+	}
+	writePNG(path, img)
+}
+
+func writeRGB565PNG(data []byte, w int, h int, path string) {
+	if len(data) < w*h*2 {
+		return
+	}
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			v := binary.BigEndian.Uint16(data[(y*w+x)*2:])
+			r := uint8(uint32((v>>11)&0x1F) * 255 / 31)
+			g := uint8(uint32((v>>5)&0x3F) * 255 / 63)
+			b := uint8(uint32(v&0x1F) * 255 / 31)
+			img.SetRGBA(x, y, color.RGBA{r, g, b, 0xFF})
 		}
 	}
 	writePNG(path, img)
