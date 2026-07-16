@@ -1292,6 +1292,11 @@ func writeRGB565PNG(data []byte, w int, h int, path string) {
 }
 
 func writePNG(path string, img image.Image) {
+	path = filepath.Join("captures", filepath.Base(path))
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "png directory %s: %v\n", filepath.Dir(path), err)
+		return
+	}
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "png %s: %v\n", path, err)
@@ -1393,6 +1398,11 @@ func swap16(data []byte) {
 
 func dumpRAMRange(bus *Bus, off uint32, size uint32, path string) {
 	if off+size > uint32(len(bus.RAM)) {
+		return
+	}
+	path = filepath.Join(".tmp", "dumps", filepath.Base(path))
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "dump directory %s: %v\n", filepath.Dir(path), err)
 		return
 	}
 	if err := os.WriteFile(path, bus.RAM[off:off+size], 0644); err != nil {

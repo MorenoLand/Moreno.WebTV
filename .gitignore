@@ -15,6 +15,10 @@ debug_*.bin
 debug_*.png
 fb.raw
 preview_*.png
+captures/
+.gocache/
+.gomodcache/
+.tmp/
 
 # Local/editor noise
 .DS_Store
