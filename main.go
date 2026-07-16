@@ -1238,6 +1238,8 @@ func writeVideoFrameCandidates(bus *Bus) {
 	writeGray4PNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_4bpp_640x400.png", base))
 	writeGray8PNG(data, 512, 256, fmt.Sprintf("debug_vid_nstart_%08X_8bpp_512x256.png", base))
 	writeRGB565PNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_rgb565_640x400.png", base))
+	writeYUY2PNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_yuy2_640x400.png", base))
+	writeUYVYPNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_uyvy_640x400.png", base))
 	fmt.Printf("Video frame candidates written from VID_NSTART RAM 0x%08X\n", base)
 }
 
@@ -1289,6 +1291,54 @@ func writeRGB565PNG(data []byte, w int, h int, path string) {
 		}
 	}
 	writePNG(path, img)
+}
+
+func writeYUY2PNG(data []byte, w int, h int, path string) {
+	writeYUV422PNG(data, w, h, path, false)
+}
+
+func writeUYVYPNG(data []byte, w int, h int, path string) {
+	writeYUV422PNG(data, w, h, path, true)
+}
+
+func writeYUV422PNG(data []byte, w int, h int, path string, uyvy bool) {
+	if len(data) < w*h*2 || w&1 != 0 {
+		return
+	}
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x += 2 {
+			off := (y*w + x) * 2
+			var y0, u, y1, v uint8
+			if uyvy {
+				u, y0, v, y1 = data[off], data[off+1], data[off+2], data[off+3]
+			} else {
+				y0, u, y1, v = data[off], data[off+1], data[off+2], data[off+3]
+			}
+			r, g, b := yuvToRGB(y0, u, v)
+			img.SetRGBA(x, y, color.RGBA{r, g, b, 0xFF})
+			r, g, b = yuvToRGB(y1, u, v)
+			img.SetRGBA(x+1, y, color.RGBA{r, g, b, 0xFF})
+		}
+	}
+	writePNG(path, img)
+}
+
+func yuvToRGB(y, u, v uint8) (uint8, uint8, uint8) {
+	c := int(y) - 16
+	d := int(u) - 128
+	e := int(v) - 128
+	return clampByte((298*c + 409*e + 128) >> 8), clampByte((298*c - 100*d - 208*e + 128) >> 8), clampByte((298*c + 516*d + 128) >> 8)
+}
+
+func clampByte(v int) uint8 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
 }
 
 func writePNG(path string, img image.Image) {
