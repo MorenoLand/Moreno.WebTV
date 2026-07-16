@@ -18,6 +18,8 @@ The emulator boots real boot ROM code and reaches firmware code paths. Recent wo
 
 The current blocker is still before first real UI pixels: firmware reaches modem/TellyScript and scheduler paths, but the current bypass path logs repeated `ERROR #1: Line 0:` instead of cleanly progressing to IDE reads or video drawing.
 
+The SDL2 frame viewer is an explicit native build target. Build with `-tags sdl` and `CGO_ENABLED=1`, then set `WEBTV_VIDEO=1` to open the captured 640x400 `VID_NSTART` buffer after the run stops. The current presentation path uses YUY2, based on the firmware-programmed display buffer.
+
 ## Repository Layout
 
 - `main.go` - boot harness and current trace/debug run loop.

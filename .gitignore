@@ -19,6 +19,7 @@ captures/
 .gocache/
 .gomodcache/
 .tmp/
+.tools/
 
 # Local/editor noise
 .DS_Store
