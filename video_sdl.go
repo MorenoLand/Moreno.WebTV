@@ -18,21 +18,20 @@ const (
 )
 
 type sdl2 struct {
-	init            func(uint32) int32
-	quit            func()
-	getError        func() *byte
-	createWindow    func(*byte, int32, int32, int32, int32, uint32) unsafe.Pointer
-	destroyWindow   func(unsafe.Pointer)
-	createRenderer  func(unsafe.Pointer, int32, uint32) unsafe.Pointer
-	destroyRenderer func(unsafe.Pointer)
-	createTexture   func(unsafe.Pointer, uint32, int32, int32, int32) unsafe.Pointer
-	destroyTexture  func(unsafe.Pointer)
-	updateTexture   func(unsafe.Pointer, unsafe.Pointer, unsafe.Pointer, int32) int32
-	renderClear     func(unsafe.Pointer) int32
-	renderCopy      func(unsafe.Pointer, unsafe.Pointer, unsafe.Pointer, unsafe.Pointer) int32
-	renderPresent   func(unsafe.Pointer)
-	pollEvent       func(unsafe.Pointer) int32
-	delay           func(uint32)
+	init             func(uint32) int32
+	quit             func()
+	getError         func() *byte
+	createWindow     func(*byte, int32, int32, int32, int32, uint32) unsafe.Pointer
+	destroyWindow    func(unsafe.Pointer)
+	createRenderer   func(unsafe.Pointer, int32, uint32) unsafe.Pointer
+	destroyRenderer  func(unsafe.Pointer)
+	createTexture    func(unsafe.Pointer, uint32, int32, int32, int32) unsafe.Pointer
+	destroyTexture   func(unsafe.Pointer)
+	updateTexture    func(unsafe.Pointer, unsafe.Pointer, unsafe.Pointer, int32) int32
+	renderClear      func(unsafe.Pointer) int32
+	renderCopy       func(unsafe.Pointer, unsafe.Pointer, unsafe.Pointer, unsafe.Pointer) int32
+	renderPresent    func(unsafe.Pointer)
+	waitEventTimeout func(unsafe.Pointer, int32) int32
 }
 
 func loadSDL2() (*sdl2, error) {
@@ -54,8 +53,7 @@ func loadSDL2() (*sdl2, error) {
 	purego.RegisterLibFunc(&s.renderClear, uintptr(lib), "SDL_RenderClear")
 	purego.RegisterLibFunc(&s.renderCopy, uintptr(lib), "SDL_RenderCopy")
 	purego.RegisterLibFunc(&s.renderPresent, uintptr(lib), "SDL_RenderPresent")
-	purego.RegisterLibFunc(&s.pollEvent, uintptr(lib), "SDL_PollEvent")
-	purego.RegisterLibFunc(&s.delay, uintptr(lib), "SDL_Delay")
+	purego.RegisterLibFunc(&s.waitEventTimeout, uintptr(lib), "SDL_WaitEventTimeout")
 	return s, nil
 }
 
@@ -97,10 +95,9 @@ func showVideoFrame(bus *Bus) error {
 	s.renderPresent(renderer)
 	event := [56]byte{}
 	for {
-		if s.pollEvent(unsafe.Pointer(&event[0])) != 0 && *(*uint32)(unsafe.Pointer(&event[0])) == sdlQuitEvent {
+		if s.waitEventTimeout(unsafe.Pointer(&event[0]), 16) != 0 && *(*uint32)(unsafe.Pointer(&event[0])) == sdlQuitEvent {
 			return nil
 		}
-		s.delay(16)
 	}
 }
 
