@@ -46,14 +46,16 @@ type CPU struct {
 	COP0 [32]uint32
 	TLB  [NumTLB]TLBEntry
 
-	Bus            *Bus
-	DelaySlot      bool
-	DelayPC        uint32
-	DelayBranchPC  uint32
-	LLBit          bool
-	tlbMiss        bool
-	excPC          uint32
-	excInDelaySlot bool
+	Bus             *Bus
+	DelaySlot       bool
+	DelayPC         uint32
+	DelayBranchPC   uint32
+	LLBit           bool
+	tlbMiss         bool
+	lastTLBMissPC   uint32
+	lastTLBMissAddr uint32
+	excPC           uint32
+	excInDelaySlot  bool
 
 	Steps uint64
 }
@@ -455,7 +457,7 @@ func (c *CPU) Step() error {
 			return nil
 		}
 	default:
-		return fmt.Errorf("unhandled opcode 0x%02X at PC=0x%08X inst=0x%08X", op, pc, inst)
+		return fmt.Errorf("unhandled opcode 0x%02X at PC=0x%08X inst=0x%08X EPC=0x%08X BadVAddr=0x%08X Status=0x%08X Cause=0x%08X lastTLBPC=0x%08X lastTLBAddr=0x%08X", op, pc, inst, c.COP0[EPC], c.COP0[BadVAddr], c.COP0[Status], c.COP0[Cause], c.lastTLBMissPC, c.lastTLBMissAddr)
 	}
 
 	c.Regs[0] = 0
@@ -800,6 +802,12 @@ func (c *CPU) waitForInterrupt() {
 				}
 			}
 		}
+		if a.VIDIntEnable != 0 && a.VideoNext != 0 && a.Cycles < a.VideoNext {
+			delta := a.VideoNext - a.Cycles
+			if cycles == 0 || delta < cycles {
+				cycles = delta
+			}
+		}
 	}
 	if cycles != 0 {
 		oldSteps := c.Steps
@@ -824,6 +832,8 @@ func (c *CPU) RaiseTLBMiss(vaddr uint32) {
 	}
 	nested := c.COP0[Status]&0x02 != 0
 	c.tlbMiss = true
+	c.lastTLBMissPC = c.excPC
+	c.lastTLBMissAddr = vaddr
 	c.COP0[BadVAddr] = vaddr
 	vpn2 := vaddr & 0xFFFFE000
 	c.COP0[EntryHi] = (c.COP0[EntryHi] & 0xFF) | vpn2

@@ -45,3 +45,20 @@ func TestPendingIP2RequiresEnabledInterruptSource(t *testing.T) {
 		t.Fatalf("enabled timer interrupt did not assert IP2")
 	}
 }
+
+func TestVideoInterruptTicksAndAcknowledges(t *testing.T) {
+	asic := NewSoloASIC()
+	asic.Write(0x0088, 0x08)
+	asic.Tick(videoFramePeriodCycles - 1)
+	if asic.VIDIntStat != 0 || asic.PendingIP2() {
+		t.Fatalf("video interrupt fired before frame boundary")
+	}
+	asic.Tick(1)
+	if asic.VIDIntStat&0x08 == 0 || asic.BusIntStat&BUS_INT_VIDEO == 0 || !asic.PendingIP2() {
+		t.Fatalf("enabled video interrupt did not assert IP2: stat=0x%08X bus=0x%08X", asic.VIDIntStat, asic.BusIntStat)
+	}
+	asic.Write(0x0180, 0x08)
+	if asic.VIDIntStat != 0 || asic.BusIntStat&BUS_INT_VIDEO != 0 || asic.PendingIP2() {
+		t.Fatalf("video interrupt acknowledge did not clear IP2")
+	}
+}

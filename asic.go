@@ -72,6 +72,7 @@ type SoloASIC struct {
 	Cycles         uint64
 	RIOPollReadyAt uint64
 	SysTimerNext   uint64
+	VideoNext      uint64
 
 	I2C I2CBus
 }
@@ -100,6 +101,7 @@ const (
 const rioPollPeriodCycles = 200000
 const sysTimerPeriodCycles = 2783333
 const sysTimerStartCycles = 0xFFFFFFFFFFFFFFFF
+const videoFramePeriodCycles = 2783333
 
 func NewSoloASIC() *SoloASIC {
 	a := &SoloASIC{
@@ -329,13 +331,23 @@ func (a *SoloASIC) Write(off, data uint32) {
 		}
 	case 0x0088:
 		a.VIDIntEnable |= data
+		if a.VIDIntEnable != 0 && a.VideoNext == 0 {
+			a.VideoNext = a.Cycles + videoFramePeriodCycles
+		}
+		a.updateVideoInterrupt()
 	case 0x0188:
 		a.VIDIntStat &^= data
 		a.VIDIntEnable &^= data
+		if a.VIDIntEnable == 0 {
+			a.VideoNext = 0
+		}
+		a.updateVideoInterrupt()
 	case 0x0084:
 		a.VIDIntStat |= data
+		a.updateVideoInterrupt()
 	case 0x0180:
 		a.VIDIntStat &^= data
+		a.updateVideoInterrupt()
 	case 0x0098:
 		a.RIOIntEnable |= data
 	case 0x0198:
@@ -524,6 +536,16 @@ func (a *SoloASIC) i2cBitBang(oldSCL, newSCL, oldSDA, newSDA uint8) {
 
 func (a *SoloASIC) Tick(cycles uint64) {
 	a.Cycles += cycles
+	if a.VIDIntEnable != 0 {
+		if a.VideoNext == 0 {
+			a.VideoNext = a.Cycles + videoFramePeriodCycles
+		}
+		if a.Cycles >= a.VideoNext {
+			a.VIDIntStat |= a.VIDIntEnable
+			a.VideoNext = a.Cycles + videoFramePeriodCycles
+			a.updateVideoInterrupt()
+		}
+	}
 	if a.TimIntEnable&(1<<2) != 0 && a.Cycles >= sysTimerStartCycles {
 		if a.SysTimerNext == 0 {
 			a.SysTimerNext = a.Cycles + sysTimerPeriodCycles
@@ -551,6 +573,9 @@ const (
 )
 
 func (a *SoloASIC) PendingIP2() bool {
+	if a.VIDIntStat&a.VIDIntEnable != 0 {
+		return true
+	}
 	if a.BusIntStat&BUS_INT_TIMER != 0 && a.TimIntEnable&(1<<2) != 0 {
 		return true
 	}
@@ -561,6 +586,14 @@ func (a *SoloASIC) PendingIP2() bool {
 		return true
 	}
 	return false
+}
+
+func (a *SoloASIC) updateVideoInterrupt() {
+	if a.VIDIntStat&a.VIDIntEnable != 0 {
+		a.BusIntStat |= BUS_INT_VIDEO
+	} else {
+		a.BusIntStat &^= BUS_INT_VIDEO
+	}
 }
 
 func (a *SoloASIC) assertBusIRQ() {
