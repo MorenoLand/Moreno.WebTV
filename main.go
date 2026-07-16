@@ -964,7 +964,7 @@ func main() {
 		printRangeSummary(bus, 0x00400000, 0x00100000, "final video-ish 0x80400000")
 		dumpRAMRange(bus, 0x00400000, 0x100000, "debug_video_80400000_final.bin")
 		writeVideoFrameCandidates(bus)
-		if os.Getenv("WEBTV_VIDEO") == "1" {
+		if os.Getenv("WEBTV_VIDEO") != "0" {
 			if err := showVideoFrame(bus); err != nil {
 				fmt.Fprintf(os.Stderr, "SDL video: %v\n", err)
 			}
