@@ -192,6 +192,12 @@ func (c *CPU) execSWR(rt uint32, addr uint32) {
 
 func (c *CPU) Step() error {
 	c.Steps++
+	if c.Bus.SkipNullCleanup && c.PC == 0x802E80C4 && c.Bus.Read32(uint32(c.Regs[16])+0x110) == 0 {
+		fmt.Printf("skipped null cleanup step=%d object=0x%08X ra=0x%08X\n", c.Steps, uint32(c.Regs[16]), uint32(c.Regs[31]))
+		c.PC = uint32(c.Regs[31])
+		c.DelaySlot = false
+		return nil
+	}
 	if c.COP0[Random] > c.COP0[Wired] {
 		c.COP0[Random]--
 	} else {
@@ -230,6 +236,41 @@ func (c *CPU) Step() error {
 
 	if c.tlbMiss {
 		return nil
+	}
+	if c.Bus.TraceNullFlow && pc >= 0x802E8080 && pc < 0x802E8100 && c.Bus.TraceNullCount < 64 {
+		fmt.Printf("null-flow step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X s0=0x%08X s1=0x%08X s2=0x%08X s3=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X v0=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[16]), uint32(c.Regs[17]), uint32(c.Regs[18]), uint32(c.Regs[19]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[2]), uint32(c.Regs[31]))
+		c.Bus.TraceNullCount++
+	}
+	if c.Bus.TraceDeviceField && pc >= 0x8026D6C0 && pc < 0x8026D7DC && c.Bus.TraceNullCount < 4096 {
+		fmt.Printf("resource-flow step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X v0=0x%08X v1=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X s0=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[2]), uint32(c.Regs[3]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[16]), uint32(c.Regs[31]))
+		c.Bus.TraceNullCount++
+	}
+	if c.Bus.TraceDeviceField && c.Steps >= 45_600_000 && pc >= 0x8026D24C && pc < 0x8026D3C0 && c.Bus.TraceFactoryCount < 256 {
+		fmt.Printf("factory-flow step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X v0=0x%08X v1=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X s0=0x%08X s1=0x%08X s2=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[2]), uint32(c.Regs[3]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[16]), uint32(c.Regs[17]), uint32(c.Regs[18]), uint32(c.Regs[31]))
+		c.Bus.TraceFactoryCount++
+	}
+	if c.Bus.TraceDeviceField && pc >= 0x8026C288 && pc < 0x8026C318 && c.Bus.TraceRegistryInitCount < 64 {
+		fmt.Printf("registry-init step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X v0=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[2]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[16]), uint32(c.Regs[17]), uint32(c.Regs[31]))
+		c.Bus.TraceRegistryInitCount++
+	}
+	if c.Bus.TraceDeviceField && pc == 0x802E8D0C {
+		fmt.Printf("factory-manager-init step=%d a0=0x%08X ra=0x%08X\n", c.Steps, uint32(c.Regs[4]), uint32(c.Regs[31]))
+	}
+	if c.Bus.TraceDeviceField && pc >= 0x802FBB40 && pc < 0x802FBBC0 && c.Bus.TraceFatalCount < 64 {
+		fmt.Printf("fatal-callback step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X v0=0x%08X v1=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X s0=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[2]), uint32(c.Regs[3]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[16]), uint32(c.Regs[31]))
+		c.Bus.TraceFatalCount++
+	}
+	if c.Bus.TraceDeviceField && pc >= 0x802FB5E0 && pc < 0x802FB640 && c.Bus.TraceCallbackPrepCount < 64 {
+		fmt.Printf("callback-prep step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X v0=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X a3=0x%08X s0=0x%08X sp=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[2]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[7]), uint32(c.Regs[16]), uint32(c.Regs[29]), uint32(c.Regs[31]))
+		c.Bus.TraceCallbackPrepCount++
+	}
+	if c.Bus.TraceDeviceField && pc >= 0x802FB500 && pc < 0x802FB640 && uint32(c.Regs[5]) == 0x8034845C && c.Bus.TraceCallbackOriginCount < 96 {
+		fmt.Printf("callback-origin step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X v0=0x%08X v1=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X a3=0x%08X s0=0x%08X s1=0x%08X sp=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[2]), uint32(c.Regs[3]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[7]), uint32(c.Regs[16]), uint32(c.Regs[17]), uint32(c.Regs[29]), uint32(c.Regs[31]))
+		c.Bus.TraceCallbackOriginCount++
+	}
+	if c.Bus.TraceDeviceField && pc >= 0x802FC680 && pc < 0x802FC780 && c.Steps >= 38_700_000 && c.Steps < 38_800_000 && c.Bus.TraceTimerEventCount < 96 {
+		fmt.Printf("timer-event step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X v0=0x%08X v1=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X a3=0x%08X s0=0x%08X s1=0x%08X sp=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[2]), uint32(c.Regs[3]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[7]), uint32(c.Regs[16]), uint32(c.Regs[17]), uint32(c.Regs[29]), uint32(c.Regs[31]))
+		c.Bus.TraceTimerEventCount++
 	}
 
 	if c.DelaySlot {

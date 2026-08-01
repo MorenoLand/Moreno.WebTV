@@ -41,8 +41,27 @@ func TestPendingIP2RequiresEnabledInterruptSource(t *testing.T) {
 		t.Fatalf("disabled timer interrupt asserted IP2")
 	}
 	asic.TimIntEnable = BUS_INT_TIM_SYSTIMER
+	if asic.PendingIP2() {
+		t.Fatalf("timer source bypassed disabled bus interrupt")
+	}
+	asic.BusIntEnable = BUS_INT_TIMER
+	asic.BusIntStat = BUS_INT_TIMER
 	if !asic.PendingIP2() {
-		t.Fatalf("enabled timer interrupt did not assert IP2")
+		t.Fatalf("enabled timer bus interrupt did not assert IP2")
+	}
+}
+
+func TestTimerEnableUsesBusInterruptRouting(t *testing.T) {
+	asic := NewSoloASIC()
+	asic.Write(0x00A4, BUS_INT_TIM_SYSTIMER)
+	if asic.TimIntEnable != BUS_INT_TIM_SYSTIMER {
+		t.Fatalf("timer enable=0x%08X, want only system timer", asic.TimIntEnable)
+	}
+	if asic.BusIntEnable&BUS_INT_TIMER == 0 {
+		t.Fatalf("timer source did not enable bus timer interrupt")
+	}
+	if asic.PendingIP2() {
+		t.Fatalf("enabling timer source asserted IP2 without pending status")
 	}
 }
 

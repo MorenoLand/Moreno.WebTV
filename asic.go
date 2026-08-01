@@ -362,8 +362,8 @@ func (a *SoloASIC) Write(off, data uint32) {
 		}
 	case 0x00A4:
 		a.TimIntEnable |= data
-		if data&(1<<2) != 0 {
-			a.TimIntEnable |= 1 << 3
+		if a.TimIntEnable != 0 {
+			a.BusIntEnable |= BUS_INT_TIMER
 		}
 		if data&(1<<2) != 0 && a.SysTimerNext == 0 {
 			a.SysTimerNext = a.Cycles + sysTimerPeriodCycles
@@ -546,13 +546,15 @@ func (a *SoloASIC) Tick(cycles uint64) {
 			a.updateVideoInterrupt()
 		}
 	}
-	if a.TimIntEnable&(1<<2) != 0 && a.Cycles >= sysTimerStartCycles {
+	if a.TimIntEnable&BUS_INT_TIM_SYSTIMER != 0 && a.Cycles >= sysTimerStartCycles {
 		if a.SysTimerNext == 0 {
 			a.SysTimerNext = a.Cycles + sysTimerPeriodCycles
 		}
 		if a.Cycles >= a.SysTimerNext {
 			a.TimIntStat |= BUS_INT_TIM_SYSTIMER
-			a.BusIntStat |= BUS_INT_TIMER
+			if a.BusIntEnable&BUS_INT_TIMER != 0 {
+				a.BusIntStat |= BUS_INT_TIMER
+			}
 		}
 	}
 	if a.TimerCompare != 0 && a.Cycles>>1 >= uint64(a.TimerCompare) {
@@ -574,12 +576,6 @@ const (
 
 func (a *SoloASIC) PendingIP2() bool {
 	if a.VIDIntStat&a.VIDIntEnable != 0 {
-		return true
-	}
-	if a.BusIntStat&BUS_INT_TIMER != 0 && a.TimIntEnable&(1<<2) != 0 {
-		return true
-	}
-	if a.TimIntStat&a.TimIntEnable != 0 {
 		return true
 	}
 	if a.BusIntStat&a.BusIntEnable != 0 {

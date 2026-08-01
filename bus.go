@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -15,27 +16,38 @@ const (
 )
 
 type Bus struct {
-	RAM           [RAM_SIZE]byte
-	ROM           [ROM_MAX]byte
-	ROMSz         uint32
-	Asic          *SoloASIC
-	IDE           *IDEController
-	CPU           *CPU
-	AsicReadCnt   [0x10000]uint64
-	Tracking      bool
-	PollCnt       map[uint32]uint64
-	RIOReadCnt    uint64
-	RIOWriteCnt   uint64
-	ModemReadCnt  uint64
-	ModemWriteCnt uint64
-	ModemRX       []byte
-	ModemTXLine   []byte
-	ModemStage    int
-	ModemStageAt  uint64
+	RAM                      [RAM_SIZE]byte
+	ROM                      [ROM_MAX]byte
+	ROMSz                    uint32
+	Asic                     *SoloASIC
+	IDE                      *IDEController
+	CPU                      *CPU
+	AsicReadCnt              [0x10000]uint64
+	Tracking                 bool
+	PollCnt                  map[uint32]uint64
+	RIOReadCnt               uint64
+	RIOWriteCnt              uint64
+	ModemReadCnt             uint64
+	ModemWriteCnt            uint64
+	ModemRX                  []byte
+	ModemTXLine              []byte
+	ModemStage               int
+	ModemStageAt             uint64
+	ModemPPPBytes            int
+	SkipNullCleanup          bool
+	TraceNullFlow            bool
+	TraceNullCount           uint32
+	TraceDeviceField         bool
+	TraceFactoryCount        uint32
+	TraceRegistryInitCount   uint32
+	TraceFatalCount          uint32
+	TraceCallbackPrepCount   uint32
+	TraceCallbackOriginCount uint32
+	TraceTimerEventCount     uint32
 }
 
 func NewBus() *Bus {
-	b := &Bus{}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1"}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -168,6 +180,15 @@ func (b *Bus) Read32(addr uint32) uint32 {
 
 func (b *Bus) Write8(addr, val uint32) {
 	p := b.phys(addr)
+	if b.TraceDeviceField && p >= 0x1E20 && p < 0x1E2C && b.CPU != nil {
+		fmt.Printf("decoder-registry write8 step=%d pc=0x%08X inst=0x%08X addr=0x%08X val=0x%02X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), p, val&0xFF)
+	}
+	if b.TraceDeviceField && p == 0xEADB4 && b.CPU != nil {
+		fmt.Printf("device-field write8 step=%d pc=0x%08X inst=0x%08X val=0x%02X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), val&0xFF)
+	}
+	if b.TraceDeviceField && p == 0x2658 && b.CPU != nil {
+		fmt.Printf("factory-global write8 step=%d pc=0x%08X inst=0x%08X val=0x%02X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), val&0xFF)
+	}
 	if rp, ok := ramMirror(p, 1); ok {
 		if ((rp >= 0x330 && rp <= 0x590) || (rp >= 0x288 && rp <= 0x28B) || (rp >= 0x101C && rp <= 0x101F) || (rp >= 0x16A0 && rp <= 0x16A3) || (rp >= 0x17A0 && rp <= 0x17A3) || (rp >= 0x1904 && rp <= 0x1909) || (rp >= 0x1CF0 && rp <= 0x1CF7) || (rp >= 0x2240 && rp <= 0x224E) || (rp >= 0x2730 && rp <= 0x2733) || (rp >= 0x7E930 && rp <= 0x7E960) || (rp >= 0x80A88 && rp <= 0x80A98) || (rp >= 0xA510 && rp <= 0xA690) || rp == 0x1E74) && b.CPU != nil {
 			fmt.Printf("RAM watch8 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%02X\n",
@@ -195,6 +216,15 @@ func (b *Bus) Write8(addr, val uint32) {
 
 func (b *Bus) Write16(addr, val uint32) {
 	p := b.phys(addr)
+	if b.TraceDeviceField && p < 0x1E2C && p+1 >= 0x1E20 && b.CPU != nil {
+		fmt.Printf("decoder-registry write16 step=%d pc=0x%08X inst=0x%08X addr=0x%08X val=0x%04X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), p, val&0xFFFF)
+	}
+	if b.TraceDeviceField && p <= 0xEADB4 && p+1 >= 0xEADB4 && b.CPU != nil {
+		fmt.Printf("device-field write16 step=%d pc=0x%08X inst=0x%08X val=0x%04X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), val&0xFFFF)
+	}
+	if b.TraceDeviceField && p <= 0x2658 && p+1 >= 0x2658 && b.CPU != nil {
+		fmt.Printf("factory-global write16 step=%d pc=0x%08X inst=0x%08X addr=0x%08X val=0x%04X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), p, val&0xFFFF)
+	}
 	if rp, ok := ramMirror(p, 2); ok {
 		if ((rp <= 0x590 && rp+1 >= 0x330) || (rp <= 0x28B && rp+1 >= 0x288) || (rp <= 0x101F && rp+1 >= 0x101C) || (rp <= 0x16A3 && rp+1 >= 0x16A0) || (rp <= 0x17A3 && rp+1 >= 0x17A0) || (rp <= 0x1909 && rp+1 >= 0x1904) || (rp <= 0x1CF7 && rp+1 >= 0x1CF0) || (rp <= 0x224E && rp+1 >= 0x2240) || (rp <= 0x2733 && rp+1 >= 0x2730) || (rp <= 0x7E960 && rp+1 >= 0x7E930) || (rp <= 0x80A98 && rp+1 >= 0x80A88) || (rp <= 0xA690 && rp+1 >= 0xA510) || (rp <= 0x1E74 && rp+1 >= 0x1E74)) && b.CPU != nil {
 			fmt.Printf("RAM watch16 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%04X\n",
@@ -222,6 +252,15 @@ func (b *Bus) Write16(addr, val uint32) {
 
 func (b *Bus) Write32(addr, val uint32) {
 	p := b.phys(addr)
+	if b.TraceDeviceField && p < 0x1E2C && p+3 >= 0x1E20 && b.CPU != nil {
+		fmt.Printf("decoder-registry write32 step=%d pc=0x%08X inst=0x%08X addr=0x%08X val=0x%08X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), p, val)
+	}
+	if b.TraceDeviceField && p <= 0xEADB4 && p+3 >= 0xEADB4 && b.CPU != nil {
+		fmt.Printf("device-field write32 step=%d pc=0x%08X inst=0x%08X val=0x%08X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), val)
+	}
+	if b.TraceDeviceField && p <= 0x2658 && p+3 >= 0x2658 && b.CPU != nil {
+		fmt.Printf("factory-global write32 step=%d pc=0x%08X inst=0x%08X addr=0x%08X val=0x%08X a0=0x%08X s0=0x%08X ra=0x%08X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), p, val, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[16]), uint32(b.CPU.Regs[31]))
+	}
 	if p >= 0x1E400000 && p <= 0x1E80001F {
 		b.IDE.Write32(p-0x1E400000, val)
 		return
@@ -309,6 +348,16 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 	}
 	if off == 0 {
 		ch := byte(val)
+		if b.ModemStage >= 4 {
+			if ch == 0x7E {
+				if b.ModemPPPBytes != 0 && b.CPU != nil {
+					fmt.Printf("modem PPP frame step=%d bytes=%d\n", b.CPU.Steps, b.ModemPPPBytes)
+				}
+				b.ModemPPPBytes = 0
+			} else {
+				b.ModemPPPBytes++
+			}
+		}
 		if ch != '\r' && ch != '\n' {
 			b.ModemTXLine = append(b.ModemTXLine, ch)
 		}
