@@ -51,3 +51,10 @@ func TestVideoFrameBytesUsesVIDNStart(t *testing.T) {
 		t.Fatal("frame data does not start at VID_NSTART")
 	}
 }
+
+func TestVideoFrameBytesRejectsResetVIDNStart(t *testing.T) {
+	bus := NewBus()
+	if _, ok := videoFrameBytes(bus); ok {
+		t.Fatal("reset VID_NSTART must not expose low RAM as video")
+	}
+}
