@@ -19,7 +19,14 @@ const (
 	sdlTextureStreaming    = 1
 	sdlPixelFormatYUY2     = 0x32595559
 	sdlQuitEvent           = 0x100
+	videoStableDuration    = 150 * time.Millisecond
 )
+
+type stableVideoFrame struct {
+	candidate []byte
+	presented []byte
+	since     time.Time
+}
 
 type sdl2 struct {
 	init             func(uint32) int32
@@ -91,12 +98,13 @@ func showVideoFrame(bus *Bus, done <-chan struct{}) error {
 	}
 	defer s.destroyTexture(texture)
 	started := time.Now()
+	frames := stableVideoFrame{presented: splash}
 	event := [56]byte{}
 	for {
-		data := splash
+		data := frames.presented
 		if time.Since(started) >= 4*time.Second {
 			if frame, ok := videoFrameBytes(bus); ok {
-				data = frame
+				data = frames.update(frame, time.Now())
 			}
 		}
 		if s.updateTexture(texture, nil, unsafe.Pointer(unsafe.SliceData(data)), videoWidth*2) != 0 {
@@ -115,6 +123,33 @@ func showVideoFrame(bus *Bus, done <-chan struct{}) error {
 		default:
 		}
 	}
+}
+
+func (f *stableVideoFrame) update(frame []byte, now time.Time) []byte {
+	if !videoFramePresentable(frame) {
+		f.candidate = f.candidate[:0]
+		f.since = now
+		return f.presented
+	}
+	if !bytes.Equal(frame, f.candidate) {
+		f.candidate = append(f.candidate[:0], frame...)
+		f.since = now
+	} else if now.Sub(f.since) >= videoStableDuration && !bytes.Equal(f.presented, f.candidate) {
+		f.presented = append(f.presented[:0], f.candidate...)
+	}
+	return f.presented
+}
+
+func videoFramePresentable(frame []byte) bool {
+	magenta, samples := 0, 0
+	for i := 0; i+3 < len(frame); i += 128 {
+		u, v := frame[i+1], frame[i+3]
+		if u > 170 && v > 170 {
+			magenta++
+		}
+		samples++
+	}
+	return samples != 0 && magenta*2 < samples
 }
 
 func bootSplashFrame(bus *Bus) ([]byte, error) {

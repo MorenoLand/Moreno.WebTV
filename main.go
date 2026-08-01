@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -1054,9 +1055,11 @@ func main() {
 		}()
 	}()
 	if os.Getenv("WEBTV_VIDEO") != "0" {
+		runtime.LockOSThread()
 		if err := showVideoFrame(bus, done); err != nil {
 			fmt.Fprintf(os.Stderr, "SDL video: %v\n", err)
 		}
+		runtime.UnlockOSThread()
 	}
 	<-done
 	fmt.Printf("Stopped at PC=0x%08X Status=0x%08X\n", cpu.PC, cpu.COP0[Status])

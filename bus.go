@@ -112,10 +112,7 @@ func (b *Bus) Read8(addr uint32) uint8 {
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		return b.modemRead8(p - 0x1E000000)
 	}
-	if p == 0x04FFFFF3 {
-		return 2
-	}
-	if p >= 0x04000000 && p < 0x05000000 {
+	if p >= 0x04000000 && p < 0x04010000 {
 		return uint8(b.Asic.Read(p & 0xFFFF))
 	}
 	return 0xFF
@@ -133,7 +130,7 @@ func (b *Bus) Read16(addr uint32) uint16 {
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		return uint16(b.modemRead8(p - 0x1E000000))
 	}
-	if p >= 0x04000000 && p < 0x05000000 {
+	if p >= 0x04000000 && p < 0x04010000 {
 		return uint16(b.Asic.Read(p & 0xFFFF))
 	}
 	if p >= 0x1E400000 && p <= 0x1E80001F {
@@ -144,7 +141,7 @@ func (b *Bus) Read16(addr uint32) uint16 {
 
 func (b *Bus) Read32(addr uint32) uint32 {
 	p := b.phys(addr)
-	if p >= 0x04000000 && p < 0x05000000 {
+	if p >= 0x04000000 && p < 0x04010000 {
 		if b.Tracking {
 			b.AsicReadCnt[p&0xFFFF]++
 		}
@@ -197,7 +194,7 @@ func (b *Bus) Write8(addr, val uint32) {
 		b.RAM[rp] = byte(val)
 		return
 	}
-	if p >= 0x04000000 && p < 0x05000000 {
+	if p >= 0x04000000 && p < 0x04010000 {
 		if (p&0xFFFF) == 0x90A8 && b.CPU != nil {
 			b.RIOWriteCnt++
 			if b.RIOWriteCnt <= 64 || b.RIOWriteCnt%1000 == 0 {
@@ -233,7 +230,7 @@ func (b *Bus) Write16(addr, val uint32) {
 		binary.BigEndian.PutUint16(b.RAM[rp:], uint16(val))
 		return
 	}
-	if p >= 0x04000000 && p < 0x05000000 {
+	if p >= 0x04000000 && p < 0x04010000 {
 		if (p&0xFFFF) == 0x90A8 && b.CPU != nil {
 			b.RIOWriteCnt++
 			if b.RIOWriteCnt <= 64 || b.RIOWriteCnt%1000 == 0 {
@@ -285,7 +282,7 @@ func (b *Bus) Write32(addr, val uint32) {
 		binary.BigEndian.PutUint32(b.RAM[rp:], val)
 		return
 	}
-	if p >= 0x04000000 && p < 0x05000000 {
+	if p >= 0x04000000 && p < 0x04010000 {
 		if (p&0xFFFF) == 0x90A8 && b.CPU != nil {
 			b.RIOWriteCnt++
 			if b.RIOWriteCnt <= 64 || b.RIOWriteCnt%1000 == 0 {
