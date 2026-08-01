@@ -20,7 +20,9 @@ Working notes distilled from the WebTV Wiki. These are reference facts, not a su
 
 - Firmware writes `VID_NSTART=0x8000B740` and enables video interrupt bit `0x8`.
 - The emulator now supplies a paced video interrupt and tracks acknowledgement through the SOLO video interrupt registers.
-- The current boot still stops before UI drawing on a null load at firmware PC `0x802E80D8`; the target is the earlier emulated device behavior that leaves the object field at `0x800EADB4` null.
+- Firmware's bus interrupt table maps video/audio/RIO/device/timer to bits `0x80/0x40/0x20/0x10/0x08` respectively.
+- Video register `0x3010` contains frame size `0x72D80`; together with the 1120-byte scanline this identifies the packed YUY2 scanout as `560x420`.
+- The former image-manager null dereference at `0x802E80D8` and the later audio-dispatch loop are fixed; a full run now remains in normal firmware execution with `EXL=0`.
 
 ## Sources
 

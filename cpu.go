@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math/bits"
+)
 
 const (
 	Index    = 0
@@ -543,7 +546,7 @@ func (c *CPU) execSpecial(pc, inst, rs, rt, rd, shamt uint32, rsv, rtv uint64) {
 		return
 	case 0x0D: // BREAK
 		c.setReg32(rd, pc+8)
-		c.exception(pc, 0x08)
+		c.exception(pc, 0x09)
 		return
 
 	// HI/LO moves
@@ -586,13 +589,17 @@ func (c *CPU) execSpecial(pc, inst, rs, rt, rd, shamt uint32, rsv, rtv uint64) {
 
 	// 64-bit multiply/divide
 	case 0x1C: // DMULT
-		result := int64(rsv) * int64(rtv)
-		c.LO = uint64(result)
-		c.HI = uint64(result >> 64)
+		hi, lo := bits.Mul64(rsv, rtv)
+		if int64(rsv) < 0 {
+			hi -= rtv
+		}
+		if int64(rtv) < 0 {
+			hi -= rsv
+		}
+		c.LO = lo
+		c.HI = hi
 	case 0x1D: // DMULTU
-		result := rsv * rtv
-		c.LO = result
-		c.HI = (rsv * rtv) >> 64
+		c.HI, c.LO = bits.Mul64(rsv, rtv)
 	case 0x1E: // DDIV
 		if rtv != 0 {
 			c.LO = uint64(int64(rsv) / int64(rtv))
@@ -658,30 +665,31 @@ func (c *CPU) execSpecial(pc, inst, rs, rt, rd, shamt uint32, rsv, rtv uint64) {
 	case 0x3F: // DSRA32
 		c.setReg(rd, uint64(int64(rtv)>>(shamt+32)))
 
-	// TGEU (trap)
+	// Traps
 	case 0x30: // TGE
-		c.exception(pc, 0x08)
+		if int64(rsv) >= int64(rtv) {
+			c.exception(pc, 0x0D)
+		}
 	case 0x31: // TGEU
 		if rsv >= rtv {
-			c.exception(pc, 0x08)
+			c.exception(pc, 0x0D)
 		}
 	case 0x32: // TLT
 		if int64(rsv) < int64(rtv) {
-			c.exception(pc, 0x08)
+			c.exception(pc, 0x0D)
 		}
 	case 0x33: // TLTU
 		if rsv < rtv {
-			c.exception(pc, 0x08)
+			c.exception(pc, 0x0D)
+		}
+	case 0x34: // TEQ
+		if rsv == rtv {
+			c.exception(pc, 0x0D)
 		}
 	case 0x36: // TNE
 		if rsv != rtv {
-			c.exception(pc, 0x08)
+			c.exception(pc, 0x0D)
 		}
-
-	// JALR (linking jump register)
-	case 0x34: // JALR rd variant handled by 0x09 above already
-		c.setReg32(rd, pc+8)
-		c.branch(pc, uint32(rsv))
 
 	default:
 		return // NOP/unknown
@@ -721,6 +729,42 @@ func (c *CPU) execRegImm(pc, rs, rt uint32, rsv uint64, simm int32) {
 		if int64(rsv) >= 0 {
 			c.branch(pc, target)
 		}
+	case 0x02: // BLTZL
+		if int64(rsv) < 0 {
+			c.branch(pc, target)
+		} else {
+			c.PC = pc + 8
+		}
+	case 0x03: // BGEZL
+		if int64(rsv) >= 0 {
+			c.branch(pc, target)
+		} else {
+			c.PC = pc + 8
+		}
+	case 0x08: // TGEI
+		if int64(rsv) >= int64(simm) {
+			c.exception(pc, 0x0D)
+		}
+	case 0x09: // TGEIU
+		if rsv >= uint64(int64(simm)) {
+			c.exception(pc, 0x0D)
+		}
+	case 0x0A: // TLTI
+		if int64(rsv) < int64(simm) {
+			c.exception(pc, 0x0D)
+		}
+	case 0x0B: // TLTIU
+		if rsv < uint64(int64(simm)) {
+			c.exception(pc, 0x0D)
+		}
+	case 0x0C: // TEQI
+		if int64(rsv) == int64(simm) {
+			c.exception(pc, 0x0D)
+		}
+	case 0x0E: // TNEI
+		if int64(rsv) != int64(simm) {
+			c.exception(pc, 0x0D)
+		}
 	case 0x10: // BLTZAL
 		c.setReg32(31, pc+8)
 		if int64(rsv) < 0 {
@@ -730,6 +774,20 @@ func (c *CPU) execRegImm(pc, rs, rt uint32, rsv uint64, simm int32) {
 		c.setReg32(31, pc+8)
 		if int64(rsv) >= 0 {
 			c.branch(pc, target)
+		}
+	case 0x12: // BLTZALL
+		if int64(rsv) < 0 {
+			c.setReg32(31, pc+8)
+			c.branch(pc, target)
+		} else {
+			c.PC = pc + 8
+		}
+	case 0x13: // BGEZALL
+		if int64(rsv) >= 0 {
+			c.setReg32(31, pc+8)
+			c.branch(pc, target)
+		} else {
+			c.PC = pc + 8
 		}
 	}
 }

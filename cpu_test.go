@@ -499,3 +499,85 @@ func TestStepPreservesASICBusInterruptCauseBit(t *testing.T) {
 		t.Fatalf("step cleared pending ASIC bus interrupt IP2: Cause=0x%08X", cpu.COP0[Cause])
 	}
 }
+
+func TestTGEOnlyTrapsWhenConditionIsTrue(t *testing.T) {
+	bus := NewBus()
+	cpu := NewCPU(bus)
+	bus.CPU = cpu
+	cpu.COP0[Status] = 0x00400000
+
+	cpu.execSpecial(0x80000000, 0x00220030, 1, 2, 0, 0, ^uint64(1), ^uint64(0))
+	if cpu.COP0[Cause]&0x7C != 0 {
+		t.Fatalf("false TGE raised exception: Cause=0x%08X", cpu.COP0[Cause])
+	}
+
+	cpu.execSpecial(0x80000004, 0x00220030, 1, 2, 0, 0, ^uint64(0), ^uint64(1))
+	if got := (cpu.COP0[Cause] >> 2) & 0x1F; got != 13 {
+		t.Fatalf("true TGE exception code=%d, want 13", got)
+	}
+	if cpu.COP0[EPC] != 0x80000004 || cpu.PC != 0xBFC00380 {
+		t.Fatalf("true TGE EPC=0x%08X PC=0x%08X", cpu.COP0[EPC], cpu.PC)
+	}
+}
+
+func TestTEQIsTrapNotJump(t *testing.T) {
+	bus := NewBus()
+	cpu := NewCPU(bus)
+	cpu.COP0[Status] = 0x00400000
+	cpu.execSpecial(0x80000000, 0x00220034, 1, 2, 0, 0, 7, 7)
+	if got := (cpu.COP0[Cause] >> 2) & 0x1F; got != 13 {
+		t.Fatalf("TEQ exception code=%d, want 13", got)
+	}
+	if cpu.DelaySlot {
+		t.Fatal("TEQ incorrectly scheduled a branch")
+	}
+}
+
+func TestDMULTProducesSigned128BitProduct(t *testing.T) {
+	cpu := NewCPU(NewBus())
+	cpu.execSpecial(0, 0x0000001C, 0, 0, 0, 0, ^uint64(1), 3)
+	if cpu.HI != 0xFFFFFFFFFFFFFFFF || cpu.LO != 0xFFFFFFFFFFFFFFFA {
+		t.Fatalf("DMULT HI:LO=%016X:%016X", cpu.HI, cpu.LO)
+	}
+}
+
+func TestDMULTUProducesUnsigned128BitProduct(t *testing.T) {
+	cpu := NewCPU(NewBus())
+	cpu.execSpecial(0, 0x0000001D, 0, 0, 0, 0, 0xFFFFFFFFFFFFFFFF, 2)
+	if cpu.HI != 1 || cpu.LO != 0xFFFFFFFFFFFFFFFE {
+		t.Fatalf("DMULTU HI:LO=%016X:%016X", cpu.HI, cpu.LO)
+	}
+}
+
+func TestREGIMMBranchLikelyNotTakenAnnulsDelaySlot(t *testing.T) {
+	bus := NewBus()
+	cpu := NewCPU(bus)
+	bus.CPU = cpu
+	cpu.PC = 0x80000000
+	cpu.Regs[8] = 1
+	binary.BigEndian.PutUint32(bus.RAM[0x00:], 0x05020001) // BLTZL t0,+1
+	binary.BigEndian.PutUint32(bus.RAM[0x04:], 0x24840001) // ADDIU a0,a0,1
+
+	if err := cpu.Step(); err != nil {
+		t.Fatalf("BLTZL step returned error: %v", err)
+	}
+	if cpu.PC != 0x80000008 {
+		t.Fatalf("BLTZL not-taken PC=0x%08X, want 0x80000008", cpu.PC)
+	}
+	if err := cpu.Step(); err != nil {
+		t.Fatalf("post-BLTZL step returned error: %v", err)
+	}
+	if cpu.Regs[4] != 0 {
+		t.Fatalf("BLTZL not-taken executed delay slot, a0=%d", cpu.Regs[4])
+	}
+}
+
+func TestREGIMMImmediateTrap(t *testing.T) {
+	bus := NewBus()
+	cpu := NewCPU(bus)
+	cpu.COP0[Status] = 0x00400000
+	cpu.execRegImm(0x80000000, 1, 0x0C, 7, 7)
+	if got := (cpu.COP0[Cause] >> 2) & 0x1F; got != 13 {
+		t.Fatalf("TEQI exception code=%d, want 13", got)
+	}
+}

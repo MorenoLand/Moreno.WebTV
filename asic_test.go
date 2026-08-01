@@ -81,3 +81,14 @@ func TestVideoInterruptTicksAndAcknowledges(t *testing.T) {
 		t.Fatalf("video interrupt acknowledge did not clear IP2")
 	}
 }
+
+func TestModemRXUsesDeviceBusInterrupt(t *testing.T) {
+	bus := NewBus()
+	bus.queueModemRX([]byte{0x41})
+	if bus.Asic.BusIntStat&BUS_INT_DEVICE == 0 {
+		t.Fatalf("modem RX did not assert device bus interrupt: stat=0x%08X", bus.Asic.BusIntStat)
+	}
+	if bus.Asic.BusIntStat&(1<<6) != 0 {
+		t.Fatalf("modem RX incorrectly asserted audio bus interrupt: stat=0x%08X", bus.Asic.BusIntStat)
+	}
+}

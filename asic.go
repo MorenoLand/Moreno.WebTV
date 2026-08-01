@@ -570,7 +570,7 @@ const (
 	BUS_INT_TIM_SYSTIMER = 1 << 2 // Timer system timer
 	BUS_INT_TIM_BUSTOUT  = 1 << 2 // Bus timeout / watchdog
 	BUS_INT_RIO          = 1 << 5
-	BUS_INT_DEVICE       = 1 << 6
+	BUS_INT_DEVICE       = 1 << 4
 	BUS_INT_VIDEO        = 1 << 7
 )
 

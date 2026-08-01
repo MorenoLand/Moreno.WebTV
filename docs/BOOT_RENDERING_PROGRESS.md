@@ -17,13 +17,8 @@
 
 ## Current Blocker
 
-- Early image-resource construction reaches `0x8026C1D8` before its decoder registry at `0x80001E20` has been initialized, so it returns null.
-- Firmware stores that null in object field `0x800EACA4 + 0x110`, then later dereferences it at `0x802E80D8`.
-- The registry is initialized later by firmware routine `0x8026C288`. The next task is to trace its caller and correct the scheduler or initialization ordering, rather than synthesize a decoder object.
-- The initializer is called from the resource completion path at `0x8026D710`; its first observed installation occurs at step `47,397,638`, after the affected early-resource calls.
-- The earlier gate is global manager pointer `0x80002658`: it remains zero during the first `GIFf` factory calls at step `45,620,423`, then constructor `0x802E8D0C` installs `0x800EBD78` at step `47,029,614` from startup allocator `0x802F0D1C`.
-- Startup enters the GIF loader reentrantly while constructing earlier managers. Firmware records the null result in object field `0x800EADB4`, but no later write backfills that field before its dereference.
-- The first observed scheduler callback does not dispatch until step `50,424,007`, after the manager and registry are valid. The next task is to trace why the deferred resource completion that owns `0x800EADB4` is absent or dropped.
-- A controlled run past the first null reaches a second null at `0x8026A0C0` without changing the framebuffer, confirming that the registry ordering is the upstream blocker.
-- SOLO timer source enables now route through `BUS_INT_TIMER` without inventing source bit 3 or bypassing the bus interrupt mask. Upstream arms its 50 ms callback only after a nonzero `TCOMPARE`; this firmware does not write `TCOMPARE`, so delivering that callback from `TIMINTEN` alone is invalid.
-- The `0xA40090A0` RIO reads are confined to boot calibration and end near step `4.57M`. No RIO reads occur near the resource-ordering failure, so the synthetic late-cycle return is dormant and is not the current blocker.
+- Missing MIPS III `REGIMM` branch-likely and immediate-trap instructions caused the image manager to initialize out of order. With those instructions implemented, object field `0x800EADB4` receives `0x800EB298` and the old `0x802E80D8` null dereference is gone.
+- The modem RX path asserted SOLO bus bit `0x40`, which firmware dispatches as audio through status register `0xA4000068`. Firmware's own interrupt table maps device status `0xA4000074` to bus bit `0x10`; correcting that mapping clears the later interrupt-dispatch loop.
+- A full 650-million-step run now completes without a CPU error at normal firmware PC `0x802D4FC8`, with `EXL=0` and no pending bus interrupt.
+- `VID_NSTART` points to a packed YUY2 frame. Its first scanline is 1120 bytes and video register `0x3010` contains `0x72D80`, exactly `560 * 420 * 2`; SDL scanout now uses the firmware's `560x420` geometry.
+- The corrected final framebuffer renders the authentic WebTV Plus `Remove this printer adapter` screen, including the WebTV logo and firmware text. The firmware-to-SDL video path is now proven end to end.

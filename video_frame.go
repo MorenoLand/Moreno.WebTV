@@ -1,7 +1,7 @@
 package main
 
-const videoWidth = 640
-const videoHeight = 400
+const videoWidth = 560
+const videoHeight = 420
 
 func videoFrameBytes(bus *Bus) ([]byte, bool) {
 	base := bus.Asic.VIDNStart & 0x1FFFFFFF

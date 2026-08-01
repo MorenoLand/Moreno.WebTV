@@ -156,8 +156,9 @@ func main() {
 			gateSetterPatched := false
 			firstGIFDumped := false
 			gateQueueWord := binary.BigEndian.Uint32(bus.RAM[0x80A8C:])
+			synthClock := os.Getenv("WEBTV_SYNTH_CLOCK") != "0"
 			for step := 0; step < 650_000_000; step++ {
-				if step > 38_000_000 {
+				if synthClock && step > 38_000_000 {
 					binary.BigEndian.PutUint32(bus.RAM[0x2730:], uint32(bus.Asic.Cycles/100000))
 				}
 				if step > 0 && step%100_000_000 == 0 {
@@ -1267,11 +1268,11 @@ func writeVideoFrameCandidates(bus *Bus) {
 	}
 	data := bus.RAM[base:]
 	dumpRAMRange(bus, base, 0x1000, fmt.Sprintf("debug_vid_nstart_%08X.bin", base))
-	writeGray4PNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_4bpp_640x400.png", base))
+	writeGray4PNG(data, videoWidth, videoHeight, fmt.Sprintf("debug_vid_nstart_%08X_4bpp_%dx%d.png", base, videoWidth, videoHeight))
 	writeGray8PNG(data, 512, 256, fmt.Sprintf("debug_vid_nstart_%08X_8bpp_512x256.png", base))
-	writeRGB565PNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_rgb565_640x400.png", base))
-	writeYUY2PNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_yuy2_640x400.png", base))
-	writeUYVYPNG(data, 640, 400, fmt.Sprintf("debug_vid_nstart_%08X_uyvy_640x400.png", base))
+	writeRGB565PNG(data, videoWidth, videoHeight, fmt.Sprintf("debug_vid_nstart_%08X_rgb565_%dx%d.png", base, videoWidth, videoHeight))
+	writeYUY2PNG(data, videoWidth, videoHeight, fmt.Sprintf("debug_vid_nstart_%08X_yuy2_%dx%d.png", base, videoWidth, videoHeight))
+	writeUYVYPNG(data, videoWidth, videoHeight, fmt.Sprintf("debug_vid_nstart_%08X_uyvy_%dx%d.png", base, videoWidth, videoHeight))
 	fmt.Printf("Video frame candidates written from VID_NSTART RAM 0x%08X\n", base)
 }
 

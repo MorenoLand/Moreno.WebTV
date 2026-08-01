@@ -2,6 +2,12 @@ package main
 
 import "testing"
 
+func TestVideoGeometryMatchesFirmwareFrameSize(t *testing.T) {
+	if got := videoWidth * videoHeight * 2; got != 0x72D80 {
+		t.Fatalf("YUY2 frame size=0x%X, want firmware VID_NSIZE 0x72D80", got)
+	}
+}
+
 func TestVideoFrameBytesUsesVIDNStart(t *testing.T) {
 	bus := NewBus()
 	bus.Asic.VIDNStart = 0x80001000
