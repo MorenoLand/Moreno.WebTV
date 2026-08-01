@@ -82,13 +82,70 @@ func TestVideoInterruptTicksAndAcknowledges(t *testing.T) {
 	}
 }
 
-func TestModemRXUsesDeviceBusInterrupt(t *testing.T) {
+func TestModemRXUsesRIOBusInterrupt(t *testing.T) {
 	bus := NewBus()
+	bus.modemWrite(0x04, 1, 1)
 	bus.queueModemRX([]byte{0x41})
-	if bus.Asic.BusIntStat&BUS_INT_DEVICE == 0 {
-		t.Fatalf("modem RX did not assert device bus interrupt: stat=0x%08X", bus.Asic.BusIntStat)
+	if bus.Asic.BusIntStat&BUS_INT_RIO == 0 {
+		t.Fatalf("modem RX did not assert RIO bus interrupt: stat=0x%08X", bus.Asic.BusIntStat)
 	}
 	if bus.Asic.BusIntStat&(1<<6) != 0 {
 		t.Fatalf("modem RX incorrectly asserted audio bus interrupt: stat=0x%08X", bus.Asic.BusIntStat)
+	}
+}
+
+func TestModemUARTReadyStatusInterrupt(t *testing.T) {
+	bus := NewBus()
+	bus.ModemStage = 4
+	bus.modemWrite(0x04, 0x09, 1)
+	bus.modemWrite(0x10, 0x0B, 1)
+	bus.modemWrite(0x10, 0x0B, 1)
+	bus.Tick(9999)
+	if bus.Asic.BusIntStat&BUS_INT_RIO != 0 {
+		t.Fatalf("modem status interrupt asserted before ready delay")
+	}
+	bus.Tick(1)
+	if got := bus.modemRead8(0x08); got != 0x00 {
+		t.Fatalf("modem status interrupt identification = 0x%02X, want 0x00", got)
+	}
+	if bus.Asic.BusIntStat&BUS_INT_RIO == 0 {
+		t.Fatalf("modem status did not assert RIO interrupt: stat=0x%08X", bus.Asic.BusIntStat)
+	}
+	bus.Asic.Write(0x018C, 4)
+	bus.Tick(1)
+	if bus.Asic.BusIntStat&BUS_INT_RIO == 0 {
+		t.Fatalf("pending modem status did not reassert device interrupt: stat=0x%08X", bus.Asic.BusIntStat)
+	}
+	if got := bus.modemRead8(0x18); got != 0x33 {
+		t.Fatalf("modem ready MSR = 0x%02X, want 0x33", got)
+	}
+	if got := bus.modemRead8(0x08); got != 0x01 {
+		t.Fatalf("cleared modem interrupt identification = 0x%02X, want 0x01", got)
+	}
+	if bus.Asic.BusIntStat&BUS_INT_RIO != 0 {
+		t.Fatalf("modem status acknowledge left device interrupt asserted: stat=0x%08X", bus.Asic.BusIntStat)
+	}
+	if got := bus.modemRead8(0x14); got != 0x60 {
+		t.Fatalf("idle modem LSR = 0x%02X, want 0x60", got)
+	}
+}
+
+func TestRIOInterruptEnableRaisesIP2(t *testing.T) {
+	a := NewSoloASIC()
+	a.Write(0x0094, 4)
+	a.RIOIntStat = 4
+	a.assertBusIRQ()
+	if !a.PendingIP2() {
+		t.Fatal("enabled RIO interrupt did not raise IP2")
+	}
+}
+
+func TestModemUARTDivisorLatch(t *testing.T) {
+	bus := NewBus()
+	bus.modemWrite(0x0C, 0x80, 1)
+	bus.modemWrite(0x00, 1, 1)
+	bus.modemWrite(0x04, 0, 1)
+	if bus.ModemDLL != 1 || bus.ModemDLM != 0 || bus.ModemIER != 0 || len(bus.ModemTXLine) != 0 {
+		t.Fatalf("divisor latch write leaked into UART data state: DLL=%d DLM=%d IER=%d TX=% X", bus.ModemDLL, bus.ModemDLM, bus.ModemIER, bus.ModemTXLine)
 	}
 }

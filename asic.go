@@ -184,7 +184,7 @@ func (a *SoloASIC) Read(off uint32) uint32 {
 		return a.VIDIntEnable
 	case 0x008C, 0x0090, 0x018C:
 		return a.RIOIntStat
-	case 0x0098, 0x0198:
+	case 0x0094, 0x0098, 0x0194, 0x0198:
 		return a.RIOIntEnable
 	case 0x009C, 0x00A0, 0x019C:
 		return a.TimIntStat
@@ -348,8 +348,12 @@ func (a *SoloASIC) Write(off, data uint32) {
 	case 0x0180:
 		a.VIDIntStat &^= data
 		a.updateVideoInterrupt()
+	case 0x0094:
+		a.RIOIntEnable = data
 	case 0x0098:
 		a.RIOIntEnable |= data
+	case 0x0194:
+		a.RIOIntEnable &^= data
 	case 0x0198:
 		a.RIOIntStat &^= data
 		a.RIOIntEnable &^= data
@@ -576,6 +580,9 @@ const (
 
 func (a *SoloASIC) PendingIP2() bool {
 	if a.VIDIntStat&a.VIDIntEnable != 0 {
+		return true
+	}
+	if a.RIOIntStat&a.RIOIntEnable != 0 {
 		return true
 	}
 	if a.BusIntStat&a.BusIntEnable != 0 {

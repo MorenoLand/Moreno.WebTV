@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -112,6 +113,7 @@ func main() {
 			bootGateHits := 0
 			bootGateSetterHits := 0
 			bootGateSetterUntil := 0
+			bootTimeoutHits := 0
 			bootGateCodeDumped := false
 			bootListHits := 0
 			bootListPathHits := 0
@@ -150,7 +152,7 @@ func main() {
 			irqCodeDumped := false
 			newLoopDumped := false
 			lastResolverKey := ""
-			bus.Tracking = true
+			bus.Tracking = os.Getenv("WEBTV_TRACE_BUS") == "1"
 			modemScriptEmptied := false
 			modemReadyWaitPatched := false
 			schedUnblocked := false
@@ -158,7 +160,13 @@ func main() {
 			firstGIFDumped := false
 			gateQueueWord := binary.BigEndian.Uint32(bus.RAM[0x80A8C:])
 			synthClock := os.Getenv("WEBTV_SYNTH_CLOCK") != "0"
-			for step := 0; step < 650_000_000; step++ {
+			maxSteps := 650_000_000
+			if value := os.Getenv("WEBTV_STEPS"); value != "" {
+				if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+					maxSteps = parsed
+				}
+			}
+			for step := 0; step < maxSteps; step++ {
 				if synthClock && step > 38_000_000 {
 					binary.BigEndian.PutUint32(bus.RAM[0x2730:], uint32(bus.Asic.Cycles/100000))
 				}
@@ -638,6 +646,11 @@ func main() {
 					fmt.Printf("boot list %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X g1E70=%08X g1E74=%08X acb8=%08X\n",
 						bootListPathHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E70:]), binary.BigEndian.Uint32(bus.RAM[0x1E74:]), binary.BigEndian.Uint32(bus.RAM[0xACB8:]))
 				}
+				if (cpu.PC == 0x802C7804 || cpu.PC == 0x802C7818 || cpu.PC == 0x802C782C || cpu.PC == 0x802C7878 || cpu.PC == 0x802C7888 || cpu.PC == 0x802C78A8 || cpu.PC == 0x802C78BC || cpu.PC == 0x802C78E8) && bootTimeoutHits < 80 {
+					bootTimeoutHits++
+					fmt.Printf("boot timeout %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X g198C=%08X g25B4=%08X g25C0=%08X g262C=%08X b2240=%02X b224E=%02X\n",
+						bootTimeoutHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[4], binary.BigEndian.Uint32(bus.RAM[0x198C:]), binary.BigEndian.Uint32(bus.RAM[0x25B4:]), binary.BigEndian.Uint32(bus.RAM[0x25C0:]), binary.BigEndian.Uint32(bus.RAM[0x262C:]), bus.RAM[0x2240], bus.RAM[0x224E])
+				}
 				if cpu.PC >= 0x802B4000 && cpu.PC < 0x802B4800 && !bootListPCs[cpu.PC] && len(bootListPCs) < 240 {
 					bootListPCs[cpu.PC] = true
 					fmt.Printf("list pc step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X a1=0x%016X ra=0x%016X g1e74=0x%08X\n",
@@ -949,6 +962,21 @@ func main() {
 			printStoreImmRefs(bus, 0x1E74, 16)
 			printJALRefs(bus, 0x802C7464, 16)
 			printJALRefs(bus, 0x802C52A4, 16)
+			printJALRefs(bus, 0x80234F20, 32)
+			printLoadImmRefs(bus, 0x80234F20, 32)
+			printWordRefs(bus, 0x80234F20, 32)
+			printJALRefs(bus, 0x80234EE0, 32)
+			printLoadImmRefs(bus, 0x80234EE0, 32)
+			printWordRefs(bus, 0x80234EE0, 32)
+			printJALRefs(bus, 0x802B4480, 32)
+			printLoadImmRefs(bus, 0x802B4480, 32)
+			printWordRefs(bus, 0x802B4480, 32)
+			printCodeRange(bus, 0x80234E80, 0x80235000, "gate producer")
+			printCodeRange(bus, 0x80233640, 0x80233700, "gate producer caller 1")
+			printCodeRange(bus, 0x80233A20, 0x80233AE0, "gate producer caller 2")
+			printCodeRange(bus, 0x80234260, 0x80234320, "gate producer caller 3")
+			printCodeRange(bus, 0x80287B00, 0x80287BC0, "gate producer caller 4")
+			printCodeRange(bus, 0x8033FA80, 0x8033FB80, "gate producer vtable")
 			printJALRefs(bus, 0x802B417C, 32)
 			printJALRefs(bus, 0x802C5EC0, 16)
 			printJALRefs(bus, 0x802C5E80, 16)
@@ -1226,8 +1254,21 @@ func printLoadImmRefs(bus *Bus, target uint32, limit int) {
 			continue
 		}
 		rt := (w0 >> 16) & 0x1F
-		if ((w1>>26 == 0x0D || w1>>26 == 0x09) && ((w1>>21)&0x1F) == rt && ((w1>>16)&0x1F) == rt && w1&0xFFFF == lo) || (lo == 0 && w1 == 0) {
+		if lo == 0 || (w1>>26 == 0x0D || w1>>26 == 0x09) && ((w1>>21)&0x1F) == rt && ((w1>>16)&0x1F) == rt && w1&0xFFFF == lo {
 			fmt.Printf("Final load imm ref target=0x%08X at PC=0x%08X inst0=0x%08X inst1=0x%08X\n", target, 0x80000000|off, w0, w1)
+			printed++
+			if printed >= limit {
+				return
+			}
+		}
+	}
+}
+
+func printWordRefs(bus *Bus, target uint32, limit int) {
+	printed := 0
+	for off := uint32(0); off+3 < RAM_SIZE; off += 4 {
+		if binary.BigEndian.Uint32(bus.RAM[off:]) == target {
+			fmt.Printf("Final word ref target=0x%08X at addr=0x%08X\n", target, 0x80000000|off)
 			printed++
 			if printed >= limit {
 				return

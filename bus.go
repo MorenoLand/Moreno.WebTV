@@ -34,6 +34,13 @@ type Bus struct {
 	ModemStage               int
 	ModemStageAt             uint64
 	ModemPPPBytes            int
+	ModemIER                 uint8
+	ModemLCR                 uint8
+	ModemMCR                 uint8
+	ModemMSR                 uint8
+	ModemDLL                 uint8
+	ModemDLM                 uint8
+	ModemReadyAt             uint64
 	SkipNullCleanup          bool
 	TraceNullFlow            bool
 	TraceNullCount           uint32
@@ -44,10 +51,12 @@ type Bus struct {
 	TraceCallbackPrepCount   uint32
 	TraceCallbackOriginCount uint32
 	TraceTimerEventCount     uint32
+	TracePage                bool
+	TracePageCount           uint32
 }
 
 func NewBus() *Bus {
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1"}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1"}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -106,6 +115,7 @@ func (b *Bus) Read8(addr uint32) uint8 {
 		return b.RAM[rp]
 	}
 	if p >= ROM_BASE && p < ROM_BASE+uint32(ROM_MAX) {
+		b.tracePageRead(p, 1)
 		off := p - ROM_BASE
 		return b.ROM[off]
 	}
@@ -124,6 +134,7 @@ func (b *Bus) Read16(addr uint32) uint16 {
 		return binary.BigEndian.Uint16(b.RAM[rp:])
 	}
 	if p >= ROM_BASE && p < ROM_BASE+uint32(ROM_MAX)-1 {
+		b.tracePageRead(p, 2)
 		off := p - ROM_BASE
 		return binary.BigEndian.Uint16(b.ROM[off:])
 	}
@@ -169,10 +180,29 @@ func (b *Bus) Read32(addr uint32) uint32 {
 		return binary.BigEndian.Uint32(b.RAM[rp:])
 	}
 	if p >= ROM_BASE && p < ROM_BASE+uint32(ROM_MAX)-3 {
+		b.tracePageRead(p, 4)
 		off := p - ROM_BASE
 		return binary.BigEndian.Uint32(b.ROM[off:])
 	}
 	return 0xFFFFFFFF
+}
+
+func (b *Bus) tracePageRead(p, width uint32) {
+	if !b.TracePage || b.CPU == nil || b.TracePageCount >= 64 {
+		return
+	}
+	ranges := [...]struct {
+		start uint32
+		size  uint32
+		name  string
+	}{{0x1FD239F4, 420, "Startup.html"}, {0x1FD2FC34, 505, "Connecting.html"}, {0x1FD17554, 14384, "ConnectingTo.gif"}, {0x1FD1AD88, 4890, "CityRoad.gif"}}
+	for _, page := range ranges {
+		if p < page.start+page.size && p+width > page.start {
+			b.TracePageCount++
+			fmt.Printf("page ROM read %02d step=%d pc=0x%08X execPC=0x%08X name=%s addr=0x%08X width=%d ra=0x%08X\n", b.TracePageCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, page.name, p, width, uint32(b.CPU.Regs[31]))
+			return
+		}
+	}
 }
 
 func (b *Bus) Write8(addr, val uint32) {
@@ -187,7 +217,7 @@ func (b *Bus) Write8(addr, val uint32) {
 		fmt.Printf("factory-global write8 step=%d pc=0x%08X inst=0x%08X val=0x%02X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), val&0xFF)
 	}
 	if rp, ok := ramMirror(p, 1); ok {
-		if ((rp >= 0x330 && rp <= 0x590) || (rp >= 0x288 && rp <= 0x28B) || (rp >= 0x101C && rp <= 0x101F) || (rp >= 0x16A0 && rp <= 0x16A3) || (rp >= 0x17A0 && rp <= 0x17A3) || (rp >= 0x1904 && rp <= 0x1909) || (rp >= 0x1CF0 && rp <= 0x1CF7) || (rp >= 0x2240 && rp <= 0x224E) || (rp >= 0x2730 && rp <= 0x2733) || (rp >= 0x7E930 && rp <= 0x7E960) || (rp >= 0x80A88 && rp <= 0x80A98) || (rp >= 0xA510 && rp <= 0xA690) || rp == 0x1E74) && b.CPU != nil {
+		if b.Tracking && ((rp >= 0x330 && rp <= 0x590) || (rp >= 0x288 && rp <= 0x28B) || (rp >= 0x101C && rp <= 0x101F) || (rp >= 0x16A0 && rp <= 0x16A3) || (rp >= 0x17A0 && rp <= 0x17A3) || (rp >= 0x1904 && rp <= 0x1909) || (rp >= 0x1CF0 && rp <= 0x1CF7) || (rp >= 0x2240 && rp <= 0x224E) || (rp >= 0x2730 && rp <= 0x2733) || (rp >= 0x7E930 && rp <= 0x7E960) || (rp >= 0x80A88 && rp <= 0x80A98) || (rp >= 0xA510 && rp <= 0xA690) || rp == 0x1E74) && b.CPU != nil {
 			fmt.Printf("RAM watch8 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%02X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val&0xFF)
 		}
@@ -223,7 +253,7 @@ func (b *Bus) Write16(addr, val uint32) {
 		fmt.Printf("factory-global write16 step=%d pc=0x%08X inst=0x%08X addr=0x%08X val=0x%04X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), p, val&0xFFFF)
 	}
 	if rp, ok := ramMirror(p, 2); ok {
-		if ((rp <= 0x590 && rp+1 >= 0x330) || (rp <= 0x28B && rp+1 >= 0x288) || (rp <= 0x101F && rp+1 >= 0x101C) || (rp <= 0x16A3 && rp+1 >= 0x16A0) || (rp <= 0x17A3 && rp+1 >= 0x17A0) || (rp <= 0x1909 && rp+1 >= 0x1904) || (rp <= 0x1CF7 && rp+1 >= 0x1CF0) || (rp <= 0x224E && rp+1 >= 0x2240) || (rp <= 0x2733 && rp+1 >= 0x2730) || (rp <= 0x7E960 && rp+1 >= 0x7E930) || (rp <= 0x80A98 && rp+1 >= 0x80A88) || (rp <= 0xA690 && rp+1 >= 0xA510) || (rp <= 0x1E74 && rp+1 >= 0x1E74)) && b.CPU != nil {
+		if b.Tracking && ((rp <= 0x590 && rp+1 >= 0x330) || (rp <= 0x28B && rp+1 >= 0x288) || (rp <= 0x101F && rp+1 >= 0x101C) || (rp <= 0x16A3 && rp+1 >= 0x16A0) || (rp <= 0x17A3 && rp+1 >= 0x17A0) || (rp <= 0x1909 && rp+1 >= 0x1904) || (rp <= 0x1CF7 && rp+1 >= 0x1CF0) || (rp <= 0x224E && rp+1 >= 0x2240) || (rp <= 0x2733 && rp+1 >= 0x2730) || (rp <= 0x7E960 && rp+1 >= 0x7E930) || (rp <= 0x80A98 && rp+1 >= 0x80A88) || (rp <= 0xA690 && rp+1 >= 0xA510) || (rp <= 0x1E74 && rp+1 >= 0x1E74)) && b.CPU != nil {
 			fmt.Printf("RAM watch16 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%04X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val&0xFFFF)
 		}
@@ -267,7 +297,7 @@ func (b *Bus) Write32(addr, val uint32) {
 		return
 	}
 	if rp, ok := ramMirror(p, 4); ok {
-		if ((rp <= 0x590 && rp+3 >= 0x330) || (rp <= 0x28B && rp+3 >= 0x288) || (rp <= 0x101F && rp+3 >= 0x101C) || (rp <= 0x16A3 && rp+3 >= 0x16A0) || (rp <= 0x17A3 && rp+3 >= 0x17A0) || (rp <= 0x1907 && rp+3 >= 0x18F0) || (rp <= 0x1CF7 && rp+3 >= 0x1CF0) || (rp <= 0x224E && rp+3 >= 0x2240) || (rp <= 0x2733 && rp+3 >= 0x2730) || (rp <= 0x7E960 && rp+3 >= 0x7E930) || (rp <= 0x80A98 && rp+3 >= 0x80A88) || (rp <= 0xA690 && rp+3 >= 0xA510) || (rp <= 0x1E74 && rp+3 >= 0x1E74) || (rp <= 0xEEDD0 && rp+3 >= 0xEEDA8) || (rp <= 0xF0B93 && rp+3 >= 0xF0B70)) && b.CPU != nil {
+		if b.Tracking && ((rp <= 0x590 && rp+3 >= 0x330) || (rp <= 0x28B && rp+3 >= 0x288) || (rp <= 0x101F && rp+3 >= 0x101C) || (rp <= 0x16A3 && rp+3 >= 0x16A0) || (rp <= 0x17A3 && rp+3 >= 0x17A0) || (rp <= 0x1907 && rp+3 >= 0x18F0) || (rp <= 0x1CF7 && rp+3 >= 0x1CF0) || (rp <= 0x224E && rp+3 >= 0x2240) || (rp <= 0x2733 && rp+3 >= 0x2730) || (rp <= 0x7E960 && rp+3 >= 0x7E930) || (rp <= 0x80A98 && rp+3 >= 0x80A88) || (rp <= 0xA690 && rp+3 >= 0xA510) || (rp <= 0x1E74 && rp+3 >= 0x1E74) || (rp <= 0xEEDD0 && rp+3 >= 0xEEDA8) || (rp <= 0xF0B93 && rp+3 >= 0xF0B70)) && b.CPU != nil {
 			fmt.Printf("RAM watch32 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%08X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val)
 			if rp <= 0x101F && rp+3 >= 0x101C {
@@ -300,6 +330,10 @@ func (b *Bus) modemRead8(off uint32) uint8 {
 	var v uint8
 	switch off {
 	case 0x00:
+		if b.ModemLCR&0x80 != 0 {
+			v = b.ModemDLL
+			break
+		}
 		if len(b.ModemRX) == 0 {
 			v = 0
 			break
@@ -319,16 +353,32 @@ func (b *Bus) modemRead8(off uint32) uint8 {
 				fmt.Printf("modem stage 2 consumed step=%d writes=%d reads=%d\n", b.CPU.Steps, b.ModemWriteCnt, b.ModemReadCnt)
 			}
 		}
+		b.updateModemIRQ()
+	case 0x04:
+		if b.ModemLCR&0x80 != 0 {
+			v = b.ModemDLM
+		} else {
+			v = b.ModemIER
+		}
+	case 0x08:
+		if len(b.ModemRX) != 0 && b.ModemIER&1 != 0 {
+			v = 0x04
+		} else if b.ModemMSR&0x0F != 0 && b.ModemIER&8 != 0 {
+			v = 0x00
+		} else {
+			v = 0x01
+		}
+	case 0x0C:
+		v = b.ModemLCR
 	case 0x14:
+		v = 0x60
 		if len(b.ModemRX) != 0 {
-			v = 0x21
-			break
+			v |= 0x01
 		}
-		v = 0x20
 	case 0x18:
-		if len(b.ModemRX) != 0 {
-			v = 0x80
-		}
+		v = b.ModemMSR
+		b.ModemMSR &^= 0x0F
+		b.updateModemIRQ()
 	default:
 		v = 0
 	}
@@ -343,7 +393,12 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 	if b.CPU != nil && (b.ModemWriteCnt <= 128 || b.ModemWriteCnt%1000000 == 0) {
 		fmt.Printf("modem write #%d step=%d PC=0x%08X execPC=0x%08X off=0x%02X width=%d val=0x%X\n", b.ModemWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, off, width, val)
 	}
-	if off == 0 {
+	switch off {
+	case 0x00:
+		if b.ModemLCR&0x80 != 0 {
+			b.ModemDLL = uint8(val)
+			break
+		}
 		ch := byte(val)
 		if b.ModemStage >= 4 {
 			if ch == 0x7E {
@@ -376,13 +431,79 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 			}
 			b.ModemTXLine = b.ModemTXLine[:0]
 		}
+	case 0x04:
+		if b.ModemLCR&0x80 != 0 {
+			b.ModemDLM = uint8(val)
+		} else {
+			b.ModemIER = uint8(val)
+			b.updateModemIRQ()
+		}
+	case 0x08:
+		if val&2 != 0 {
+			b.ModemRX = b.ModemRX[:0]
+		}
+		b.updateModemIRQ()
+	case 0x0C:
+		b.ModemLCR = uint8(val)
+	case 0x10:
+		b.ModemMCR = uint8(val)
+		old := b.ModemMSR & 0xF0
+		current := old
+		if b.ModemStage >= 4 && b.ModemMCR&3 == 3 {
+			if current == 0 && b.ModemReadyAt == 0 {
+				b.ModemReadyAt = b.Asic.Cycles + 10000
+			}
+		} else {
+			current = 0
+			b.ModemReadyAt = 0
+		}
+		delta := b.ModemMSR & 0x0F
+		b.ModemMSR = current | delta
+		if old&0x10 != current&0x10 {
+			b.ModemMSR |= 0x01
+		}
+		if old&0x20 != current&0x20 {
+			b.ModemMSR |= 0x02
+		}
+		b.updateModemIRQ()
 	}
+}
+
+func (b *Bus) Tick(cycles uint64) {
+	b.Asic.Tick(cycles)
+	if b.ModemReadyAt != 0 && b.Asic.Cycles >= b.ModemReadyAt {
+		b.ModemReadyAt = 0
+		old := b.ModemMSR & 0xF0
+		b.ModemMSR = 0x30 | b.ModemMSR&0x0F
+		if old&0x10 == 0 {
+			b.ModemMSR |= 0x01
+		}
+		if old&0x20 == 0 {
+			b.ModemMSR |= 0x02
+		}
+	}
+	b.updateModemIRQ()
 }
 
 func (b *Bus) queueModemRX(data []byte) {
 	b.ModemRX = append(b.ModemRX, data...)
-	b.Asic.DevIntStat |= 4
-	b.Asic.BusIntStat |= BUS_INT_DEVICE
+	b.updateModemIRQ()
+}
+
+func (b *Bus) updateModemIRQ() {
+	pending := len(b.ModemRX) != 0 && b.ModemIER&1 != 0 || b.ModemMSR&0x0F != 0 && b.ModemIER&8 != 0
+	if pending {
+		b.Asic.RIOIntStat |= 4
+		b.Asic.BusIntStat |= BUS_INT_RIO
+		return
+	}
+	if b.Asic.RIOIntStat&4 == 0 {
+		return
+	}
+	b.Asic.RIOIntStat &^= 4
+	if b.Asic.RIOIntStat&b.Asic.RIOIntEnable == 0 {
+		b.Asic.BusIntStat &^= BUS_INT_RIO
+	}
 }
 
 func (b *Bus) PrintTopPollAddrs(n int) {

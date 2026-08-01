@@ -18,7 +18,8 @@
 ## Current Blocker
 
 - Missing MIPS III `REGIMM` branch-likely and immediate-trap instructions caused the image manager to initialize out of order. With those instructions implemented, object field `0x800EADB4` receives `0x800EB298` and the old `0x802E80D8` null dereference is gone.
-- The modem RX path asserted SOLO bus bit `0x40`, which firmware dispatches as audio through status register `0xA4000068`. Firmware's own interrupt table maps device status `0xA4000074` to bus bit `0x10`; correcting that mapping clears the later interrupt-dispatch loop.
+- The firmware registers UART interrupt ID `0x14`, enables SOLO RIO register `0xA4000094` bit `0x04`, and services it at `0x8022168C`. Routing UART through RIO parent bit `0x20` reaches that handler, which drains IIR/MSR and exits cleanly; `0xA4004028` is the unrelated IR status register.
+- The authentic UART interrupt path now completes, but boot event gate byte `0x8000224E` remains unset. The next blocker is the post-UART modem state transition that queues the connection-screen event.
 - A full 650-million-step run now completes without a CPU error at normal firmware PC `0x802D4FC8`, with `EXL=0` and no pending bus interrupt.
 - `VID_NSTART` points to a packed YUY2 frame. Its first scanline is 1120 bytes and video register `0x3010` contains `0x72D80`, exactly `560 * 420 * 2`; SDL scanout now uses the firmware's `560x420` geometry.
 - The corrected final framebuffer renders the authentic WebTV Plus `Remove this printer adapter` screen, including the WebTV logo and firmware text. The firmware-to-SDL video path is now proven end to end.

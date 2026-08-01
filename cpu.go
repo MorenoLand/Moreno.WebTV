@@ -59,6 +59,7 @@ type CPU struct {
 	lastTLBMissAddr uint32
 	excPC           uint32
 	excInDelaySlot  bool
+	tracePageLoads  uint32
 
 	Steps uint64
 }
@@ -206,7 +207,7 @@ func (c *CPU) Step() error {
 	} else {
 		c.COP0[Random] = uint32(NumTLB - 1)
 	}
-	c.Bus.Asic.Tick(1)
+	c.Bus.Tick(1)
 
 	// COP0 Count increments every other cycle (each Step = 1 cycle)
 	if c.Steps&1 == 0 {
@@ -239,6 +240,24 @@ func (c *CPU) Step() error {
 
 	if c.tlbMiss {
 		return nil
+	}
+	if c.Bus.TracePage && pc >= 0x80233260 && pc < 0x80233420 {
+		fmt.Printf("startup-flow step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X v0=0x%08X v1=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X a3=0x%08X s0=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[2]), uint32(c.Regs[3]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[7]), uint32(c.Regs[16]), uint32(c.Regs[31]))
+	}
+	if c.Bus.TracePage && pc >= 0x806DF100 && pc < 0x806DF240 {
+		fmt.Printf("connecting-flow step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X v0=0x%08X v1=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X a3=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[2]), uint32(c.Regs[3]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[7]), uint32(c.Regs[16]), uint32(c.Regs[17]), uint32(c.Regs[31]))
+	}
+	if c.Bus.TracePage && c.tracePageLoads < 64 && pc != 0x802C4738 {
+		op := inst >> 26
+		if op == 0x20 || op == 0x21 || op == 0x23 || op == 0x24 || op == 0x25 {
+			rs := (inst >> 21) & 0x1F
+			addr := uint32(c.Regs[rs] + uint64(int64(int16(inst))))
+			p := addr & 0x1FFFFFFF
+			if (p >= 0x1FD239F4 && p < 0x1FD23B98) || (p >= 0x1FD2FC34 && p < 0x1FD2FE2D) || (p >= 0x1FD17554 && p < 0x1FD1AD84) || (p >= 0x1FD1AD88 && p < 0x1FD1C0A2) {
+				c.tracePageLoads++
+				fmt.Printf("page payload load %02d step=%d pc=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X ra=0x%08X\n", c.tracePageLoads, c.Steps, pc, inst, addr, p, uint32(c.Regs[31]))
+			}
+		}
 	}
 	if c.Bus.TraceNullFlow && pc >= 0x802E8080 && pc < 0x802E8100 && c.Bus.TraceNullCount < 64 {
 		fmt.Printf("null-flow step=%d pc=0x%08X inst=0x%08X delay=%t target=0x%08X s0=0x%08X s1=0x%08X s2=0x%08X s3=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X v0=0x%08X ra=0x%08X\n", c.Steps, pc, inst, c.DelaySlot, c.DelayPC, uint32(c.Regs[16]), uint32(c.Regs[17]), uint32(c.Regs[18]), uint32(c.Regs[19]), uint32(c.Regs[4]), uint32(c.Regs[5]), uint32(c.Regs[6]), uint32(c.Regs[2]), uint32(c.Regs[31]))
@@ -916,7 +935,7 @@ func (c *CPU) waitForInterrupt() {
 		} else {
 			c.COP0[Count] += uint32(cycles / 2)
 		}
-		c.Bus.Asic.Tick(cycles)
+		c.Bus.Tick(cycles)
 	}
 	if c.COP0[Compare] != 0 && c.COP0[Count] >= c.COP0[Compare] {
 		c.COP0[Cause] |= 0x8000
