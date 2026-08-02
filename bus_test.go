@@ -16,6 +16,15 @@ func TestRAMMirrorsAcrossLowPhysicalAperture(t *testing.T) {
 	}
 }
 
+func TestRAMMirrorRejectsOverflowedAddresses(t *testing.T) {
+	if _, ok := ramMirror(0xFFFFFFFF, 4); ok {
+		t.Fatal("overflowed RAM address was accepted")
+	}
+	if _, ok := ramMirror(RAM_APERTURE-3, 4); ok {
+		t.Fatal("RAM access past the aperture was accepted")
+	}
+}
+
 func TestEXLKernelLowRAMBypassesTLBWhenBEVCleared(t *testing.T) {
 	bus := NewBus()
 	cpu := NewCPU(bus)

@@ -112,16 +112,17 @@ const videoFramePeriodCycles = 2783333
 
 func NewSoloASIC() *SoloASIC {
 	a := &SoloASIC{
-		ChipID:     0x03120000,
-		SysConfig:  0x003f8700,
-		VIDNStart:  0x80000000,
-		MemTiming:  0xADBADFFA,
-		MemCntl:    0x03,
-		MemRefCnt:  0x0400,
-		LEDState:   0xFFFFFFFF,
-		ResetCause: 2, // RESETCAUSE_WATCHDOG per MAME device_reset()
-		ReadHits:   make(map[uint32]uint64),
-		Regs:       make(map[uint32]uint32),
+		ChipID:      0x03120000,
+		SysConfig:   0x003f8700,
+		VIDNStart:   0x80000000,
+		MemTiming:   0xADBADFFA,
+		MemCntl:     0x03,
+		MemRefCnt:   0x0400,
+		PPortStatus: 0xF8,
+		LEDState:    0xFFFFFFFF,
+		ResetCause:  2, // RESETCAUSE_WATCHDOG per MAME device_reset()
+		ReadHits:    make(map[uint32]uint64),
+		Regs:        make(map[uint32]uint32),
 	}
 	a.I2C.SDA = 1
 	return a

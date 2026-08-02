@@ -103,7 +103,7 @@ func (b *Bus) phys(addr uint32) uint32 {
 }
 
 func ramMirror(p uint32, width uint32) (uint32, bool) {
-	if p < RAM_APERTURE && p+width <= RAM_APERTURE {
+	if width <= RAM_APERTURE && p <= RAM_APERTURE-width {
 		return p % RAM_SIZE, true
 	}
 	return 0, false
