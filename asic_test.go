@@ -125,8 +125,8 @@ func TestModemUARTReadyStatusInterrupt(t *testing.T) {
 	if bus.Asic.BusIntStat&BUS_INT_RIO != 0 {
 		t.Fatalf("modem status acknowledge left device interrupt asserted: stat=0x%08X", bus.Asic.BusIntStat)
 	}
-	if got := bus.modemRead8(0x14); got != 0x60 {
-		t.Fatalf("idle modem LSR = 0x%02X, want 0x60", got)
+	if got := bus.modemRead8(0x14); got != 0x20 {
+		t.Fatalf("idle modem LSR = 0x%02X, want 0x20", got)
 	}
 }
 

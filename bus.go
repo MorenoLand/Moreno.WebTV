@@ -122,6 +122,9 @@ func (b *Bus) Read8(addr uint32) uint8 {
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		return b.modemRead8(p - 0x1E000000)
 	}
+	if p == 0x04FFFFF3 {
+		return 2
+	}
 	if p >= 0x04000000 && p < 0x04010000 {
 		return uint8(b.Asic.Read(p & 0xFFFF))
 	}
@@ -371,7 +374,7 @@ func (b *Bus) modemRead8(off uint32) uint8 {
 	case 0x0C:
 		v = b.ModemLCR
 	case 0x14:
-		v = 0x60
+		v = 0x20
 		if len(b.ModemRX) != 0 {
 			v |= 0x01
 		}

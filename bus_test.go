@@ -32,10 +32,10 @@ func TestEXLKernelLowRAMBypassesTLBWhenBEVCleared(t *testing.T) {
 	}
 }
 
-func TestExpansionProbeDoesNotAliasSoloRegisters(t *testing.T) {
+func TestExpansionProbeSignature(t *testing.T) {
 	bus := NewBus()
 
-	if got := bus.Read8(0xA4FFFFF3); got != 0xFF {
-		t.Fatalf("expansion probe byte got 0x%02X, want 0xFF", got)
+	if got := bus.Read8(0xA4FFFFF3); got != 2 {
+		t.Fatalf("expansion probe byte got 0x%02X, want 0x02", got)
 	}
 }
