@@ -182,6 +182,22 @@ func TestParallelPortRegistersFollowSoloMapping(t *testing.T) {
 	}
 }
 
+func TestParallelPortConfigLatchesBeforeEnable(t *testing.T) {
+	a := NewSoloASIC()
+	a.Write(0x4200, 0x0101)
+	a.Write(0x4204, 0x15)
+	if got := a.PPortData; got != 1 {
+		t.Fatalf("latched parallel data=0x%08X, want 0x01", got)
+	}
+	if got := a.PPortCtrl; got != 0x23 {
+		t.Fatalf("latched parallel LPT control=0x%08X, want 0x23", got)
+	}
+	a.Write(0x422C, 1)
+	if got := a.Read(0x4200); got != 1 || a.Read(0x4204) != 0x15 {
+		t.Fatalf("enabled parallel config data=0x%08X control=0x%08X, want 0x01/0x15", got, a.Read(0x4204))
+	}
+}
+
 func TestParallelPortDisableGatesDataAndStatus(t *testing.T) {
 	a := NewSoloASIC()
 	a.PPortData = 0xAA

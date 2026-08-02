@@ -474,13 +474,9 @@ func (a *SoloASIC) Write(off, data uint32) {
 		a.GPIOInMask = ^a.GPIOOutMask
 	case 0x4020, 0x4024, 0x402C:
 	case 0x4200:
-		if a.PPortEnabled != 0 {
-			a.PPortData = data & 0xFF
-		}
+		a.PPortData = data & 0xFF
 	case 0x4204:
-		if a.PPortEnabled != 0 {
-			a.PPortCtrl = pportLPTControl(data)
-		}
+		a.PPortCtrl = pportLPTControl(data)
 	case 0x420C, 0x4210, 0x4214, 0x4218, 0x421C:
 	case 0x4220:
 		a.PPortIntEnable = data
