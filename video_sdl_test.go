@@ -51,6 +51,18 @@ func TestStableVideoFrameRejectsMostlyBlankScanout(t *testing.T) {
 	}
 }
 
+func TestStableVideoFrameRejectsTopBandOnlyScanout(t *testing.T) {
+	splash := []byte{16, 128, 16, 128}
+	frames := stableVideoFrame{presented: splash}
+	start := time.Unix(0, 0)
+	static := bytes.Repeat([]byte{80, 202, 80, 192}, 6)
+	static = append(static, bytes.Repeat([]byte{16, 128, 16, 128}, 58)...)
+	frames.update(static, start)
+	if got := frames.update(static, start.Add(2*videoStableDuration)); !bytes.Equal(got, splash) {
+		t.Fatalf("top-band scanout was presented: %v", got[:4])
+	}
+}
+
 func TestVideoFrameBytesUsesVIDNStart(t *testing.T) {
 	bus := NewBus()
 	bus.Asic.VIDNStart = 0x80001000

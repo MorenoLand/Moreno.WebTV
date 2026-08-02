@@ -153,7 +153,7 @@ func videoFramePresentable(frame []byte) bool {
 		}
 		samples++
 	}
-	return samples != 0 && magenta*10 < samples && lit*100 >= samples
+	return samples != 0 && magenta*10 < samples && lit*10 >= samples
 }
 
 func bootSplashFrame(bus *Bus) ([]byte, error) {
