@@ -55,6 +55,13 @@ type SoloASIC struct {
 	GPIOInMask  uint32
 	GPIOOutMask uint32
 
+	PPortEnabled   uint32
+	PPortData      uint32
+	PPortCtrl      uint32
+	PPortStatus    uint32
+	PPortIntEnable uint32
+	PPortIntStat   uint32
+
 	BootMode    uint32
 	UseBootMode uint32
 	ResetCause  uint32
@@ -234,6 +241,26 @@ func (a *SoloASIC) Read(off uint32) uint32 {
 		return a.GPIOInMask
 	case 0x4020, 0x4024, 0x4028, 0x402C:
 		return 0
+	case 0x4200:
+		if a.PPortEnabled == 0 {
+			return 0
+		}
+		return a.PPortData & 0xFF
+	case 0x4204:
+		return pportASICControl(a.PPortCtrl)
+	case 0x4208:
+		if a.PPortEnabled == 0 {
+			return 0
+		}
+		return pportASICStatus(a.PPortStatus)
+	case 0x420C, 0x4210, 0x4214, 0x4218, 0x421C:
+		return 0
+	case 0x4220:
+		return a.PPortEnabled
+	case 0x4224, 0x4228:
+		return a.PPortIntStat
+	case 0x422C:
+		return a.PPortEnabled
 	case 0x5000:
 		return a.MemCntl
 	case 0x5004:
@@ -446,6 +473,23 @@ func (a *SoloASIC) Write(off, data uint32) {
 		a.GPIOOutMask &^= data
 		a.GPIOInMask = ^a.GPIOOutMask
 	case 0x4020, 0x4024, 0x402C:
+	case 0x4200:
+		if a.PPortEnabled != 0 {
+			a.PPortData = data & 0xFF
+		}
+	case 0x4204:
+		if a.PPortEnabled != 0 {
+			a.PPortCtrl = pportLPTControl(data)
+		}
+	case 0x420C, 0x4210, 0x4214, 0x4218, 0x421C:
+	case 0x4220:
+		a.PPortIntEnable = data
+	case 0x4224:
+		a.PPortIntStat |= data
+	case 0x4228:
+		a.PPortIntStat &^= data
+	case 0x422C:
+		a.PPortEnabled = data & 1
 	case 0x5000:
 		a.MemCntl = data
 	case 0x5004:
@@ -461,6 +505,18 @@ func (a *SoloASIC) Write(off, data uint32) {
 	default:
 		a.Regs[off] = data
 	}
+}
+
+func pportASICControl(lpt uint32) uint32 {
+	return ((lpt>>5)&1)<<4 | ((lpt>>3)&1)<<3 | ((lpt>>1)&1)<<2 | ((lpt>>2)&1)<<1 | lpt&1
+}
+
+func pportASICStatus(lpt uint32) uint32 {
+	return ((lpt>>6)&1)<<4 | ((lpt>>4)&1)<<3 | ((lpt>>5)&1)<<2 | ((lpt>>3)&1)<<1 | (lpt>>7)&1
+}
+
+func pportLPTControl(asic uint32) uint32 {
+	return ((asic>>4)&1)<<5 | ((asic>>3)&1)<<3 | ((asic>>2)&1)<<1 | ((asic>>1)&1)<<2 | asic&1
 }
 
 func (a *SoloASIC) i2cBitBang(oldSCL, newSCL, oldSDA, newSDA uint8) {

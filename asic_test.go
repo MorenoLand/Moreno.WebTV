@@ -149,3 +149,49 @@ func TestModemUARTDivisorLatch(t *testing.T) {
 		t.Fatalf("divisor latch write leaked into UART data state: DLL=%d DLM=%d IER=%d TX=% X", bus.ModemDLL, bus.ModemDLM, bus.ModemIER, bus.ModemTXLine)
 	}
 }
+
+func TestParallelPortRegistersFollowSoloMapping(t *testing.T) {
+	a := NewSoloASIC()
+	if got := a.Read(0x4200); got != 0 {
+		t.Fatalf("disabled parallel data=0x%08X, want zero", got)
+	}
+	a.Write(0x422C, 1)
+	a.Write(0x4200, 0x1234)
+	if got := a.Read(0x4200); got != 0x34 {
+		t.Fatalf("parallel data=0x%08X, want 0x34", got)
+	}
+	a.Write(0x4204, 0x1F)
+	if got := a.PPortCtrl; got != 0x2F {
+		t.Fatalf("parallel LPT control=0x%08X, want 0x2F", got)
+	}
+	if got := a.Read(0x4204); got != 0x1F {
+		t.Fatalf("parallel ASIC control=0x%08X, want 0x1F", got)
+	}
+	a.PPortStatus = 0xF8
+	if got := a.Read(0x4208); got != 0x1F {
+		t.Fatalf("parallel ASIC status=0x%08X, want 0x1F", got)
+	}
+	a.Write(0x4224, 0x05)
+	a.Write(0x4224, 0x08)
+	if got := a.Read(0x4228); got != 0x0D {
+		t.Fatalf("parallel interrupt status=0x%08X, want 0x0D", got)
+	}
+	a.Write(0x4228, 0x04)
+	if got := a.Read(0x4224); got != 0x09 {
+		t.Fatalf("parallel interrupt clear=0x%08X, want 0x09", got)
+	}
+}
+
+func TestParallelPortDisableGatesDataAndStatus(t *testing.T) {
+	a := NewSoloASIC()
+	a.PPortData = 0xAA
+	a.PPortStatus = 0xF8
+	if got := a.Read(0x4200); got != 0 || a.Read(0x4208) != 0 {
+		t.Fatalf("disabled parallel port exposed data or status")
+	}
+	a.Write(0x422C, 1)
+	a.Write(0x422C, 0)
+	if got := a.Read(0x422C); got != 0 {
+		t.Fatalf("parallel enable readback=0x%08X, want zero", got)
+	}
+}
