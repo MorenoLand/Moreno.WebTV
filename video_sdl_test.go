@@ -40,6 +40,17 @@ func TestStableVideoFrameRejectsMagentaScratchBuffer(t *testing.T) {
 	}
 }
 
+func TestStableVideoFrameRejectsMostlyBlankScanout(t *testing.T) {
+	splash := []byte{16, 128, 16, 128}
+	frames := stableVideoFrame{presented: splash}
+	start := time.Unix(0, 0)
+	blank := bytes.Repeat([]byte{16, 128, 16, 128}, 64)
+	frames.update(blank, start)
+	if got := frames.update(blank, start.Add(2*videoStableDuration)); !bytes.Equal(got, splash) {
+		t.Fatalf("blank scanout was presented: %v", got[:4])
+	}
+}
+
 func TestVideoFrameBytesUsesVIDNStart(t *testing.T) {
 	bus := NewBus()
 	bus.Asic.VIDNStart = 0x80001000

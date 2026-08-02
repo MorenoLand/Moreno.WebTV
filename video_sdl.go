@@ -141,15 +141,19 @@ func (f *stableVideoFrame) update(frame []byte, now time.Time) []byte {
 }
 
 func videoFramePresentable(frame []byte) bool {
-	magenta, samples := 0, 0
+	magenta, lit, samples := 0, 0, 0
 	for i := 0; i+3 < len(frame); i += 128 {
+		y0, y1 := frame[i], frame[i+2]
 		u, v := frame[i+1], frame[i+3]
 		if u > 170 && v > 170 {
 			magenta++
 		}
+		if y0 > 24 || y1 > 24 {
+			lit++
+		}
 		samples++
 	}
-	return samples != 0 && magenta*2 < samples
+	return samples != 0 && magenta*10 < samples && lit*100 >= samples
 }
 
 func bootSplashFrame(bus *Bus) ([]byte, error) {
