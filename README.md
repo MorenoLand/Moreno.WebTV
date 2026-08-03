@@ -20,6 +20,8 @@ The normal boot path now passes the external-printer-adapter check and completes
 
 The SDL2 frame viewer opens by default after the firmware run stops. Set `WEBTV_VIDEO=0` to disable it. It loads `SDL2.dll` from `SDL2_DLL`, then the local `.tools` package, then the system path. The current presentation path uses YUY2, based on the firmware-programmed display buffer.
 
+Set `WEBTV_MODEM_TCP` to a TCP serial-modem peer such as `127.0.0.1:57388` to forward post-download UART bytes and receive peer data. The default synthetic modem remains active when this option is unset.
+
 ## Repository Layout
 
 - `main.go` - boot harness and current trace/debug run loop.

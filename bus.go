@@ -41,6 +41,7 @@ type Bus struct {
 	ModemDLL                 uint8
 	ModemDLM                 uint8
 	ModemReadyAt             uint64
+	ModemLink                *modemTCPLink
 	SkipNullCleanup          bool
 	TraceNullFlow            bool
 	TraceNullCount           uint32
@@ -401,6 +402,9 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 		}
 		ch := byte(val)
 		if b.ModemStage >= 4 {
+			if b.ModemLink != nil {
+				b.ModemLink.send([]byte{ch})
+			}
 			if ch == 0x7E {
 				if b.ModemPPPBytes != 0 && b.CPU != nil {
 					fmt.Printf("modem PPP frame step=%d bytes=%d\n", b.CPU.Steps, b.ModemPPPBytes)
@@ -474,6 +478,7 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 
 func (b *Bus) Tick(cycles uint64) {
 	b.Asic.Tick(cycles)
+	b.pollModemLink()
 	if b.ModemReadyAt != 0 && b.Asic.Cycles >= b.ModemReadyAt {
 		b.ModemReadyAt = 0
 		old := b.ModemMSR & 0xF0
@@ -489,6 +494,16 @@ func (b *Bus) Tick(cycles uint64) {
 		}
 	}
 	b.updateModemIRQ()
+}
+
+func (b *Bus) pollModemLink() {
+	if b.ModemLink == nil || b.ModemStage < 4 {
+		return
+	}
+	if data := b.ModemLink.poll(); len(data) != 0 {
+		b.ModemRX = append(b.ModemRX, data...)
+		b.updateModemIRQ()
+	}
 }
 
 func (b *Bus) queueModemRX(data []byte) {

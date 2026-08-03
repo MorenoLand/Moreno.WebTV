@@ -50,6 +50,18 @@ func main() {
 			}
 		}
 	}
+	var modemLink *modemTCPLink
+	if address := os.Getenv("WEBTV_MODEM_TCP"); address != "" {
+		var err error
+		modemLink, err = dialModemTCP(address)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Modem TCP: %v\n", err)
+			os.Exit(1)
+		}
+		bus.ModemLink = modemLink
+		defer modemLink.close()
+		fmt.Printf("Modem TCP peer=%s\n", address)
+	}
 
 	cpu.Reset()
 	cpu.PC = 0xBFC00000
