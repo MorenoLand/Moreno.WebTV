@@ -53,12 +53,6 @@ func main() {
 
 	cpu.Reset()
 	cpu.PC = 0xBFC00000
-	if value := os.Getenv("WEBTV_PROBE_DEVICE_TAG"); value != "" {
-		if tag, err := strconv.ParseUint(strings.TrimPrefix(value, "0x"), 16, 32); err == nil {
-			binary.BigEndian.PutUint32(bus.RAM[0x588:], uint32(tag))
-		}
-		fmt.Printf("probed device tag RAM[0x588]=0x%08X\n", binary.BigEndian.Uint32(bus.RAM[0x588:]))
-	}
 	fmt.Printf("ROM_BASE=0x%08X ROM_MAX=%d len(ROM)=%d bus.Read32(0xBFC00000)=0x%08X ROM[0xC00000:4]=0x%02X%02X%02X%02X\n", ROM_BASE, ROM_MAX, len(bus.ROM), bus.Read32(0xBFC00000), bus.ROM[0xC00000], bus.ROM[0xC00001], bus.ROM[0xC00002], bus.ROM[0xC00003])
 	fmt.Printf("WebTV Emulator — PC=0x%08X\n", cpu.PC)
 	fmt.Printf("Running...\n")

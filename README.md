@@ -16,7 +16,7 @@ The emulator boots real boot ROM code and reaches firmware code paths. Recent wo
 - Delay-slot exceptions preserve branch EPC/BD behavior.
 - Initial SOLO ASIC timer/RIO/scheduler experiments are instrumented.
 
-The current blocker is still before first real UI pixels: firmware reaches modem/TellyScript and scheduler paths, but the current bypass path logs repeated `ERROR #1: Line 0:` instead of cleanly progressing to IDE reads or video drawing.
+The normal boot path now passes the external-printer-adapter check and completes the boot-ROM modem download. The current blocker is the post-carrier network transition: the firmware waits for event key `2` at RAM gate byte `0x8000224E`, but the emulator has no PPP/WTVP peer to supply the event or received bytes, so IDE reads and live firmware video have not started.
 
 The SDL2 frame viewer opens by default after the firmware run stops. Set `WEBTV_VIDEO=0` to disable it. It loads `SDL2.dll` from `SDL2_DLL`, then the local `.tools` package, then the system path. The current presentation path uses YUY2, based on the firmware-programmed display buffer.
 

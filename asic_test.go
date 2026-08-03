@@ -152,8 +152,8 @@ func TestModemUARTDivisorLatch(t *testing.T) {
 
 func TestParallelPortRegistersFollowSoloMapping(t *testing.T) {
 	a := NewSoloASIC()
-	if a.PPortStatus != 0x08 {
-		t.Fatalf("default parallel status=0x%08X, want 0x08", a.PPortStatus)
+	if a.PPortStatus != 0 {
+		t.Fatalf("default parallel status=0x%08X, want zero", a.PPortStatus)
 	}
 	if got := a.Read(0x4200); got != 0 {
 		t.Fatalf("disabled parallel data=0x%08X, want zero", got)
