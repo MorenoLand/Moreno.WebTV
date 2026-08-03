@@ -60,3 +60,21 @@ func TestModemCarrierAssertsDCD(t *testing.T) {
 		t.Fatalf("modem status got 0x%02X, want DCD/DSR/CTS with deltas 0xBB", got)
 	}
 }
+
+func TestModemRXInterruptPrecedesCarrierStatus(t *testing.T) {
+	bus := NewBus()
+	bus.ModemStage = 4
+	bus.modemWrite(0x04, 0x09, 1)
+	bus.modemWrite(0x10, 3, 1)
+	bus.Tick(10000)
+	bus.queueModemRX([]byte{0x7E})
+	if got := bus.modemRead8(0x08); got != 0x04 {
+		t.Fatalf("RX interrupt identification = 0x%02X, want 0x04", got)
+	}
+	if got := bus.modemRead8(0x00); got != 0x7E {
+		t.Fatalf("RX byte = 0x%02X, want 0x7E", got)
+	}
+	if got := bus.modemRead8(0x08); got != 0x00 {
+		t.Fatalf("carrier interrupt identification = 0x%02X, want 0x00", got)
+	}
+}
