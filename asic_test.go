@@ -85,12 +85,27 @@ func TestVideoInterruptTicksAndAcknowledges(t *testing.T) {
 func TestModemRXUsesRIOBusInterrupt(t *testing.T) {
 	bus := NewBus()
 	bus.modemWrite(0x04, 1, 1)
+	bus.modemWrite(0x10, 0x08, 1)
 	bus.queueModemRX([]byte{0x41})
 	if bus.Asic.BusIntStat&BUS_INT_RIO == 0 {
 		t.Fatalf("modem RX did not assert RIO bus interrupt: stat=0x%08X", bus.Asic.BusIntStat)
 	}
 	if bus.Asic.BusIntStat&(1<<6) != 0 {
 		t.Fatalf("modem RX incorrectly asserted audio bus interrupt: stat=0x%08X", bus.Asic.BusIntStat)
+	}
+}
+
+func TestModemInterruptRequiresMCRHardwareGate(t *testing.T) {
+	bus := NewBus()
+	bus.Asic.Write(0x0094, 4)
+	bus.modemWrite(0x04, 1, 1)
+	bus.queueModemRX([]byte{0x41})
+	if bus.Asic.PendingIP2() {
+		t.Fatal("modem RX asserted an interrupt while OUT2 was clear")
+	}
+	bus.modemWrite(0x10, 0x08, 1)
+	if !bus.Asic.PendingIP2() {
+		t.Fatal("modem RX did not assert after OUT2 was enabled")
 	}
 }
 

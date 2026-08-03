@@ -53,7 +53,7 @@ func TestModemCarrierAssertsDCD(t *testing.T) {
 	bus := NewBus()
 	bus.ModemStage = 4
 
-	bus.modemWrite(0x10, 3, 1)
+	bus.modemWrite(0x10, 0x0B, 1)
 	bus.Tick(10000)
 
 	if got := bus.ModemMSR; got != 0xBB {

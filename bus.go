@@ -497,7 +497,7 @@ func (b *Bus) queueModemRX(data []byte) {
 }
 
 func (b *Bus) updateModemIRQ() {
-	pending := len(b.ModemRX) != 0 && b.ModemIER&1 != 0 || b.ModemMSR&0x0F != 0 && b.ModemIER&8 != 0
+	pending := b.ModemMCR&0x08 != 0 && (len(b.ModemRX) != 0 && b.ModemIER&1 != 0 || b.ModemMSR&0x0F != 0 && b.ModemIER&8 != 0)
 	if pending {
 		b.Asic.RIOIntStat |= 4
 		b.Asic.BusIntStat |= BUS_INT_RIO
