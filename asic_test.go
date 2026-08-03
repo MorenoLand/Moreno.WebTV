@@ -116,8 +116,8 @@ func TestModemUARTReadyStatusInterrupt(t *testing.T) {
 	if bus.Asic.BusIntStat&BUS_INT_RIO == 0 {
 		t.Fatalf("pending modem status did not reassert device interrupt: stat=0x%08X", bus.Asic.BusIntStat)
 	}
-	if got := bus.modemRead8(0x18); got != 0x33 {
-		t.Fatalf("modem ready MSR = 0x%02X, want 0x33", got)
+	if got := bus.modemRead8(0x18); got != 0xBB {
+		t.Fatalf("modem ready MSR = 0x%02X, want 0xBB", got)
 	}
 	if got := bus.modemRead8(0x08); got != 0x01 {
 		t.Fatalf("cleared modem interrupt identification = 0x%02X, want 0x01", got)
@@ -152,8 +152,8 @@ func TestModemUARTDivisorLatch(t *testing.T) {
 
 func TestParallelPortRegistersFollowSoloMapping(t *testing.T) {
 	a := NewSoloASIC()
-	if a.PPortStatus != 0xF8 {
-		t.Fatalf("default parallel status=0x%08X, want 0xF8", a.PPortStatus)
+	if a.PPortStatus != 0x08 {
+		t.Fatalf("default parallel status=0x%08X, want 0x08", a.PPortStatus)
 	}
 	if got := a.Read(0x4200); got != 0 {
 		t.Fatalf("disabled parallel data=0x%08X, want zero", got)
@@ -170,9 +170,9 @@ func TestParallelPortRegistersFollowSoloMapping(t *testing.T) {
 	if got := a.Read(0x4204); got != 0x1F {
 		t.Fatalf("parallel ASIC control=0x%08X, want 0x1F", got)
 	}
-	a.PPortStatus = 0xF8
-	if got := a.Read(0x4208); got != 0x1F {
-		t.Fatalf("parallel ASIC status=0x%08X, want 0x1F", got)
+	a.PPortStatus = 0x08
+	if got := a.Read(0x4208); got != 0x02 {
+		t.Fatalf("parallel ASIC status=0x%08X, want 0x02", got)
 	}
 	a.Write(0x4224, 0x05)
 	a.Write(0x4224, 0x08)

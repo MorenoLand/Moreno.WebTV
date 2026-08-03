@@ -122,9 +122,6 @@ func (b *Bus) Read8(addr uint32) uint8 {
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		return b.modemRead8(p - 0x1E000000)
 	}
-	if p == 0x04FFFFF3 {
-		return 2
-	}
 	if p >= 0x04000000 && p < 0x04010000 {
 		return uint8(b.Asic.Read(p & 0xFFFF))
 	}
@@ -468,6 +465,9 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 		if old&0x20 != current&0x20 {
 			b.ModemMSR |= 0x02
 		}
+		if old&0x80 != current&0x80 {
+			b.ModemMSR |= 0x08
+		}
 		b.updateModemIRQ()
 	}
 }
@@ -477,12 +477,15 @@ func (b *Bus) Tick(cycles uint64) {
 	if b.ModemReadyAt != 0 && b.Asic.Cycles >= b.ModemReadyAt {
 		b.ModemReadyAt = 0
 		old := b.ModemMSR & 0xF0
-		b.ModemMSR = 0x30 | b.ModemMSR&0x0F
+		b.ModemMSR = 0xB0 | b.ModemMSR&0x0F
 		if old&0x10 == 0 {
 			b.ModemMSR |= 0x01
 		}
 		if old&0x20 == 0 {
 			b.ModemMSR |= 0x02
+		}
+		if old&0x80 == 0 {
+			b.ModemMSR |= 0x08
 		}
 	}
 	b.updateModemIRQ()

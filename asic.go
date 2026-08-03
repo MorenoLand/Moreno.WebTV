@@ -118,7 +118,7 @@ func NewSoloASIC() *SoloASIC {
 		MemTiming:   0xADBADFFA,
 		MemCntl:     0x03,
 		MemRefCnt:   0x0400,
-		PPortStatus: 0xF8,
+		PPortStatus: 0x08,
 		LEDState:    0xFFFFFFFF,
 		ResetCause:  2, // RESETCAUSE_WATCHDOG per MAME device_reset()
 		ReadHits:    make(map[uint32]uint64),

@@ -41,10 +41,22 @@ func TestEXLKernelLowRAMBypassesTLBWhenBEVCleared(t *testing.T) {
 	}
 }
 
-func TestExpansionProbeSignature(t *testing.T) {
+func TestExpansionProbeIsUnmapped(t *testing.T) {
 	bus := NewBus()
 
-	if got := bus.Read8(0xA4FFFFF3); got != 2 {
-		t.Fatalf("expansion probe byte got 0x%02X, want 0x02", got)
+	if got := bus.Read8(0xA4FFFFF3); got != 0xFF {
+		t.Fatalf("unmapped expansion probe byte got 0x%02X, want 0xFF", got)
+	}
+}
+
+func TestModemCarrierAssertsDCD(t *testing.T) {
+	bus := NewBus()
+	bus.ModemStage = 4
+
+	bus.modemWrite(0x10, 3, 1)
+	bus.Tick(10000)
+
+	if got := bus.ModemMSR; got != 0xBB {
+		t.Fatalf("modem status got 0x%02X, want DCD/DSR/CTS with deltas 0xBB", got)
 	}
 }
