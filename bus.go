@@ -61,10 +61,12 @@ type Bus struct {
 	TracePageCount           uint32
 	TraceWebTVPort           bool
 	WebTVPortTraceCount      uint32
+	TraceDeviceObject        bool
+	DeviceObjectTraceCount   uint32
 }
 
 func NewBus() *Bus {
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -129,6 +131,14 @@ func (b *Bus) traceWebTVPort(op string, p, width, value uint32) {
 	}
 	b.WebTVPortTraceCount++
 	fmt.Printf("WebTV port %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X width=%d val=0x%08X v0=0x%08X a0=0x%08X a1=0x%08X ra=0x%08X\n", op, b.WebTVPortTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), p, width, value, uint32(b.CPU.Regs[2]), uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[31]))
+}
+
+func (b *Bus) traceDeviceObjectRead(rp, value uint32) {
+	if !b.TraceDeviceObject || b.DeviceObjectTraceCount >= 128 || rp != 0x588 || b.CPU == nil {
+		return
+	}
+	b.DeviceObjectTraceCount++
+	fmt.Printf("device object read #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X phys=0x%08X val=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", b.DeviceObjectTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), rp, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[16]), uint32(b.CPU.Regs[17]), uint32(b.CPU.Regs[31]))
 }
 
 func (b *Bus) Read8(addr uint32) uint8 {
@@ -198,10 +208,12 @@ func (b *Bus) Read32(addr uint32) uint32 {
 		return uint32(b.modemRead8(p - 0x1E000000))
 	}
 	if rp, ok := ramMirror(p, 4); ok {
+		v := binary.BigEndian.Uint32(b.RAM[rp:])
+		b.traceDeviceObjectRead(rp, v)
 		if b.Tracking && ((rp >= 0x710000 && rp <= 0x71FFFF) || (rp >= 0x7F0000 && rp <= 0x7FFFFF)) {
 			b.PollCnt[rp]++
 		}
-		return binary.BigEndian.Uint32(b.RAM[rp:])
+		return v
 	}
 	if p >= ROM_BASE && p < ROM_BASE+uint32(ROM_MAX)-3 {
 		b.tracePageRead(p, 4)
