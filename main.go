@@ -1039,7 +1039,13 @@ func main() {
 				printCodeRange(bus, 0x802E80C0, 0x802E8100, "device dereference")
 			}
 			if bus.TraceDeviceObject {
+				printJALRefs(bus, 0x802C5D00, 16)
+				printJALRefs(bus, 0x802C5DC4, 16)
+				printJALRefs(bus, 0x802C60DC, 16)
+				printCodeRange(bus, 0x802C5B00, 0x802C5C80, "modem object callers")
 				printCodeRange(bus, 0x802C5D00, 0x802C5E80, "modem event object setup")
+				printCodeRange(bus, 0x802C5F80, 0x802C60C0, "modem time helper")
+				printCodeRange(bus, 0x802C60C0, 0x802C6120, "modem object status helper")
 			}
 			ptr := binary.BigEndian.Uint32(bus.RAM[0x1C90:])
 			fmt.Printf("Final parser ptr=0x%08X around=%q\n", ptr, previewRAMString(bus, (ptr-96)&0x1FFFFFFF, 240))
