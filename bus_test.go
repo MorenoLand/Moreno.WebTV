@@ -47,6 +47,17 @@ func TestExpansionProbeIsUnmapped(t *testing.T) {
 	if got := bus.Read8(0xA4FFFFF3); got != 0xFF {
 		t.Fatalf("unmapped expansion probe byte got 0x%02X, want 0xFF", got)
 	}
+	if got := bus.Read32(0xA4FFFFF0); got != 0xFFFFFFFF {
+		t.Fatalf("unmapped expansion probe word got 0x%08X, want 0xFFFFFFFF", got)
+	}
+}
+
+func TestExpansionProbeDoesNotAliasParallelPortStatus(t *testing.T) {
+	bus := NewBus()
+	bus.Asic.PPortStatus = 0x08
+	if got := bus.Read8(0xA4FFFFF3); got != 0xFF {
+		t.Fatalf("expansion probe aliased parallel status, got 0x%02X", got)
+	}
 }
 
 func TestModemCarrierAssertsDCD(t *testing.T) {
@@ -76,5 +87,28 @@ func TestModemRXInterruptPrecedesCarrierStatus(t *testing.T) {
 	}
 	if got := bus.modemRead8(0x08); got != 0x00 {
 		t.Fatalf("carrier interrupt identification = 0x%02X, want 0x00", got)
+	}
+}
+
+func TestModemWireRXDeliversOneBytePerCharacterTime(t *testing.T) {
+	bus := NewBus()
+	bus.Asic.Write(0x0094, 4)
+	bus.modemWrite(0x04, 1, 1)
+	bus.ModemStage = 4
+	bus.queueModemWireRX([]byte{0x41, 0x42})
+	if len(bus.ModemRX) != 0 || len(bus.ModemWireRX) != 2 {
+		t.Fatalf("wire RX was delivered synchronously: ready=%d pending=%d, want 0/2", len(bus.ModemRX), len(bus.ModemWireRX))
+	}
+	bus.Tick(modemCharCycles - 1)
+	if len(bus.ModemRX) != 0 {
+		t.Fatalf("first wire RX byte arrived early: ready=%d", len(bus.ModemRX))
+	}
+	bus.Tick(1)
+	if got := bus.modemRead8(0x00); got != 0x41 {
+		t.Fatalf("first wire RX byte = 0x%02X, want 0x41", got)
+	}
+	bus.Tick(modemCharCycles)
+	if got := bus.modemRead8(0x00); got != 0x42 {
+		t.Fatalf("second wire RX byte = 0x%02X, want 0x42", got)
 	}
 }

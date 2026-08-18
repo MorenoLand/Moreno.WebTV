@@ -13,21 +13,28 @@
 - The display scanout is configured at `VID_NSTART = 0x8000B740`.
 - The boot ROM ROMFS contains the authentic startup animation descriptor at `/ROM/Animations/SplashLogo.cel`. It dissolves from `/ROM/Images/SplashLogo2.gif` to the gold `/ROM/Images/SplashLogo1.gif`; both are `232x174`.
 - The app ROM animation `/ROM/Animations/WebTVLogo.cel` references the boot ROM cache asset `/ROM/Cache/WebTVLogoJewel.gif`, which is `141x109`.
-- SDL now opens while CPU execution continues, presents the boot ROM's real gold splash for the initial four seconds, then switches to live YUY2 scanout from `VID_NSTART`.
+- SDL opens while CPU execution continues, presents the boot ROM's real gold splash, and switches to live YUY2 scanout from `VID_NSTART` only when a stable valid guest frame exists.
 
 ## Latest Verification (2026-08-03)
 
+- A clean `WEBTV_STEPS=65000000 WEBTV_VIDEO=0 WEBTV_COMPAT_SHIMS=0 WEBTV_SYNTH_CLOCK=0 WEBTV_SYNTHETIC_PPP=0` run reaches `PC=0x80222E5C`, `Status=0x3400C401`, `ModemStage=4`, `294` modem reads, `128` modem writes, `0` received bytes, `0` IDE sector reads, and `VID_NSTART=0x80000000`.
+- A full `650000000`-step run with those same flags reaches `PC=0x8022A448`, keeps gate byte `0x8000224E` at `0`, leaves only sentinel event key `0xFF`, and still performs `0` IDE sector reads.
+- The old host-side connecting/road fallback is not part of the current viewer. SDL presents the ROM-backed splash and switches only to a stable guest YUY2 frame.
+
 ## Current Blocker
+
+- The boot ROM directly contains `Connecting.html`, `ConnectingTo.gif`, `CityGlow.gif`, `CityRoad.gif`, `CityRoad.cel`, and `DialingWebTV.mid`; `ConnectSetup.html` contains the quick-connect setup menu. The guest has loaded `Connecting.html`, but has not reached the event/network path that makes the firmware render those resources.
 
 - A normal 60-million-step run reaches `PC=0x802C60E4` after the modem download with `ModemStage=4`, `294` modem reads, `128` modem writes, `0` received bytes, `0` IDE sector reads, and `VID_NSTART=0x80000000`.
 - A normal 650-million-step run remains stable at `PC=0x8022A448`, `Status=0x3400C401`; gate byte `0x8000224E` is `0`, the event list contains only sentinel key `0xFF`, and no live framebuffer is selected.
 - A focused trace found the candidate event-producer callers executing, but no entry into the producer code at `0x80234E80..0x80234F80`. The missing transition is therefore still before event-key insertion, not an SDL presentation problem.
 - Disabling synthetic carrier assertion is a negative control: the guest stops at `PC=0x80221608` with only `288` modem reads and `127` writes, never reaching the post-carrier wait. The carrier-enabled model remains the verified baseline.
 
-- The default SOLO parallel-port status is now zero, so the WebTV Plus firmware passes its external-printer-adapter check. A clean 60-million-step run reaches the post-download modem wait with no adapter error, `ModemStage=4`, `294` modem reads, `128` modem writes, and zero IDE sector reads.
+- The external WebTV/Pokoe probe remains unmapped by default; no host response is injected. A clean 65-million-step run therefore remains at the authentic post-carrier wait with `VID_NSTART=0x80000000`, `0` IDE reads, and no guest-rendered connecting frame.
 - Missing MIPS III `REGIMM` branch-likely and immediate-trap instructions caused the image manager to initialize out of order. With those instructions implemented, object field `0x800EADB4` receives `0x800EB298` and the old `0x802E80D8` null dereference is gone.
 - The firmware registers UART interrupt ID `0x14`, enables SOLO RIO register `0xA4000094` bit `0x04`, and services it at `0x8022168C`. Routing UART through RIO parent bit `0x20` reaches that handler, which drains IIR/MSR and exits cleanly; `0xA4004028` is the unrelated IR status register.
 - The authentic UART carrier interrupt path now completes, but boot event gate byte `0x8000224E` remains unset. At `0x802C6828`, firmware queries the list rooted at `0x800017A0` for event key `2`; the live list contains only sentinel key `0xFF`, so the gate setter is never called. There is no in-process PPP/WTVP peer supplying the post-carrier receive bytes or network event; the optional TCP modem bridge only forwards serial traffic.
 - Forcing the gate setter is diagnostic only: it advances the guest into its UART receive ring, but still produces no IDE reads or valid live frame. It must remain disabled for authentic boot verification.
 - `Connecting.html` is loaded successfully before this wait. Forcing the pending scheduler timestamp executes callback `0x8022A7A4` repeatedly but does not create event key `2`, ruling out a simple overdue-timer correction; the next blocker is the missing event producer.
 - The normal 650-million-step run completes without a CPU error, with `EXL=0` and no pending bus interrupt, but it does not select a live framebuffer. The packed YUY2 geometry and live SDL scanout remain validated only on the forced diagnostic branch, which must stay disabled for authentic boot verification.
+- The gold logo shown by SDL is decoded directly from `/ROM/Images/SplashLogo1.gif`; it is a ROM-backed presentation asset, not proof that the guest rendered the current page. No host-generated connecting/road fallback remains.

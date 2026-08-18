@@ -165,13 +165,15 @@ func main() {
 			newLoopDumped := false
 			lastResolverKey := ""
 			bus.Tracking = os.Getenv("WEBTV_TRACE_BUS") == "1"
+			compatShims := os.Getenv("WEBTV_COMPAT_SHIMS") == "1"
+			traceModemWindow := os.Getenv("WEBTV_TRACE_MODEM_RX") == "1"
 			modemScriptEmptied := false
 			modemReadyWaitPatched := false
 			schedUnblocked := false
 			gateSetterPatched := false
 			firstGIFDumped := false
 			gateQueueWord := binary.BigEndian.Uint32(bus.RAM[0x80A8C:])
-			synthClock := os.Getenv("WEBTV_SYNTH_CLOCK") != "0"
+			synthClock := os.Getenv("WEBTV_SYNTH_CLOCK") == "1"
 			maxSteps := 650_000_000
 			if value := os.Getenv("WEBTV_STEPS"); value != "" {
 				if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
@@ -475,7 +477,7 @@ func main() {
 						previewRAMString(bus, 0x0034812C, 80),
 						previewRAMString(bus, 0x00348130, 80))
 				}
-				if cpu.PC == 0x802FA220 || cpu.PC == 0x802FA250 || cpu.PC == 0x802FA294 || cpu.PC == 0x802FA2C4 {
+				if compatShims && (cpu.PC == 0x802FA220 || cpu.PC == 0x802FA250 || cpu.PC == 0x802FA294 || cpu.PC == 0x802FA2C4) {
 					bufOff := uint32(cpu.Regs[16]) & 0x1FFFFFFF
 					spArg := binary.BigEndian.Uint32(bus.RAM[(uint32(cpu.Regs[29])&0x1FFFFFFF)+0x10:])
 					before := previewRAMString(bus, bufOff, 120)
@@ -497,7 +499,7 @@ func main() {
 					dumpRAMRange(bus, 0x00084B00, 0x500, "debug_first_gif_source.bin")
 					dumpRAMRange(bus, 0x001FFE00, 0x200, "debug_first_gif_stack.bin")
 				}
-				if cpu.PC == 0x802E6140 {
+				if compatShims && cpu.PC == 0x802E6140 {
 					bufOff := (uint32(cpu.Regs[29]) & 0x1FFFFFFF) + 0x10
 					before := previewRAMString(bus, bufOff, 120)
 					shimOptionsKey(bus, bufOff, lastResolverKey)
@@ -906,6 +908,9 @@ func main() {
 				beforeS4 := cpu.Regs[20]
 				beforePC := cpu.PC
 				beforeInst := recent[step%len(recent)].inst
+				if traceModemWindow && ((step >= 57862750 && step < 57862950) || (step >= 57877350 && step < 57878000)) {
+					fmt.Printf("modem window step=%d PC=0x%08X inst=0x%08X a0=0x%08X v0=0x%08X rx=%d ier=0x%02X msr=0x%02X rioStat=0x%08X rioEn=0x%08X busStat=0x%08X busEn=0x%08X vidStat=0x%08X vidEn=0x%08X cause=0x%08X status=0x%08X\n", step, cpu.PC, beforeInst, uint32(cpu.Regs[4]), uint32(cpu.Regs[2]), len(bus.ModemRX), bus.ModemIER, bus.ModemMSR, bus.Asic.RIOIntStat, bus.Asic.RIOIntEnable, bus.Asic.BusIntStat, bus.Asic.BusIntEnable, bus.Asic.VIDIntStat, bus.Asic.VIDIntEnable, cpu.COP0[Cause], cpu.COP0[Status])
+				}
 				if err := cpu.Step(); err != nil {
 					fmt.Fprintf(os.Stderr, "CPU error at PC=0x%08X: %v\n", cpu.PC, err)
 					dumpRAMRange(bus, 0x002C7000, 0x400, "debug_802c7000.bin")
@@ -1013,6 +1018,15 @@ func main() {
 			printCodeRange(bus, 0x802C66F0, 0x802C6850, "gate caller")
 			printCodeRange(bus, 0x802A9BC0, 0x802A9C30, "gate cond")
 			printCodeRange(bus, 0x802C72D0, 0x802C7500, "gate setter")
+			if os.Getenv("WEBTV_TRACE_MODEM_RX") == "1" {
+				printCodeRange(bus, 0x80221680, 0x80221B00, "modem irq dispatcher")
+				printCodeRange(bus, 0x80221780, 0x80221820, "modem rx handler")
+				printCodeRange(bus, 0x80243460, 0x80243680, "modem packet parser entry")
+				printCodeRange(bus, 0x80243680, 0x80243880, "modem packet parser")
+			}
+			if os.Getenv("WEBTV_TRACE_WTV_PORT") == "1" {
+				printCodeRange(bus, 0x80229A80, 0x80229C40, "WebTV port probe")
+			}
 			if bus.TraceDeviceField {
 				printCodeRange(bus, 0x802E6100, 0x802E6270, "resource resolver")
 				printCodeRange(bus, 0x802E8C80, 0x802E8DE0, "factory global initializer")
@@ -1108,7 +1122,7 @@ func main() {
 	if bus.IDE != nil {
 		fmt.Printf("IDE sector reads: %d\n", bus.IDE.ReadCount)
 	}
-	fmt.Printf("Modem stage=%d reads=%d writes=%d rx=%d\n", bus.ModemStage, bus.ModemReadCnt, bus.ModemWriteCnt, len(bus.ModemRX))
+	fmt.Printf("Modem stage=%d reads=%d writes=%d rx=%d wire=%d ier=0x%02X lcr=0x%02X mcr=0x%02X msr=0x%02X nextRX=0x%016X rioStat=0x%08X rioEn=0x%08X\n", bus.ModemStage, bus.ModemReadCnt, bus.ModemWriteCnt, len(bus.ModemRX), len(bus.ModemWireRX), bus.ModemIER, bus.ModemLCR, bus.ModemMCR, bus.ModemMSR, bus.ModemNextRXAt, bus.Asic.RIOIntStat, bus.Asic.RIOIntEnable)
 	fmt.Printf("ASIC final IRQ BusStat=0x%08X BusEn=0x%08X TimStat=0x%08X TimEn=0x%08X TimerCompare=0x%08X SysTimerNext=0x%016X Cycles=0x%016X\n", bus.Asic.BusIntStat, bus.Asic.BusIntEnable, bus.Asic.TimIntStat, bus.Asic.TimIntEnable, bus.Asic.TimerCompare, bus.Asic.SysTimerNext, bus.Asic.Cycles)
 	fmt.Printf("Written ASIC registers:\n")
 	offs := make([]uint32, 0, len(bus.Asic.WriteLog))

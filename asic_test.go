@@ -95,17 +95,14 @@ func TestModemRXUsesRIOBusInterrupt(t *testing.T) {
 	}
 }
 
-func TestModemInterruptRequiresMCRHardwareGate(t *testing.T) {
+func TestModemInterruptUsesWebTVMCR(t *testing.T) {
 	bus := NewBus()
 	bus.Asic.Write(0x0094, 4)
 	bus.modemWrite(0x04, 1, 1)
+	bus.modemWrite(0x10, 3, 1)
 	bus.queueModemRX([]byte{0x41})
-	if bus.Asic.PendingIP2() {
-		t.Fatal("modem RX asserted an interrupt while OUT2 was clear")
-	}
-	bus.modemWrite(0x10, 0x08, 1)
 	if !bus.Asic.PendingIP2() {
-		t.Fatal("modem RX did not assert after OUT2 was enabled")
+		t.Fatal("modem RX did not assert with WebTV MCR=0x03")
 	}
 }
 
@@ -137,11 +134,29 @@ func TestModemUARTReadyStatusInterrupt(t *testing.T) {
 	if got := bus.modemRead8(0x08); got != 0x01 {
 		t.Fatalf("cleared modem interrupt identification = 0x%02X, want 0x01", got)
 	}
+	bus.Asic.Write(0x018C, 4)
 	if bus.Asic.BusIntStat&BUS_INT_RIO != 0 {
 		t.Fatalf("modem status acknowledge left device interrupt asserted: stat=0x%08X", bus.Asic.BusIntStat)
 	}
 	if got := bus.modemRead8(0x14); got != 0x20 {
 		t.Fatalf("idle modem LSR = 0x%02X, want 0x20", got)
+	}
+}
+
+func TestModemRXInterruptStatusIsStickyUntilRIOAck(t *testing.T) {
+	bus := NewBus()
+	bus.Asic.Write(0x0094, 4)
+	bus.modemWrite(0x04, 1, 1)
+	bus.queueModemRX([]byte{0x41})
+	if got := bus.modemRead8(0x00); got != 0x41 {
+		t.Fatalf("modem RX byte = 0x%02X, want 0x41", got)
+	}
+	if bus.Asic.RIOIntStat&4 == 0 || bus.Asic.BusIntStat&BUS_INT_RIO == 0 {
+		t.Fatalf("consuming modem RX cleared sticky RIO status: rio=0x%08X bus=0x%08X", bus.Asic.RIOIntStat, bus.Asic.BusIntStat)
+	}
+	bus.Asic.Write(0x018C, 4)
+	if bus.Asic.RIOIntStat&4 != 0 || bus.Asic.BusIntStat&BUS_INT_RIO != 0 {
+		t.Fatalf("RIO acknowledge left modem status asserted: rio=0x%08X bus=0x%08X", bus.Asic.RIOIntStat, bus.Asic.BusIntStat)
 	}
 }
 

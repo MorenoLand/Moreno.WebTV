@@ -97,15 +97,12 @@ func showVideoFrame(bus *Bus, done <-chan struct{}) error {
 		return fmt.Errorf("SDL_CreateTexture: %s", s.errorString())
 	}
 	defer s.destroyTexture(texture)
-	started := time.Now()
 	frames := stableVideoFrame{presented: splash}
 	event := [56]byte{}
 	for {
 		data := frames.presented
-		if time.Since(started) >= 4*time.Second {
-			if frame, ok := videoFrameBytes(bus); ok {
-				data = frames.update(frame, time.Now())
-			}
+		if frame, ok := videoFrameBytes(bus); ok {
+			data = frames.update(frame, time.Now())
 		}
 		if s.updateTexture(texture, nil, unsafe.Pointer(unsafe.SliceData(data)), videoWidth*2) != 0 {
 			return fmt.Errorf("SDL_UpdateTexture: %s", s.errorString())

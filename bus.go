@@ -34,6 +34,11 @@ type Bus struct {
 	ModemStage               int
 	ModemStageAt             uint64
 	ModemPPPBytes            int
+	ModemLCPQueued           bool
+	ModemWireRX              []byte
+	ModemNextRXAt            uint64
+	SyntheticPPP             bool
+	CompatShims              bool
 	ModemIER                 uint8
 	ModemLCR                 uint8
 	ModemMCR                 uint8
@@ -54,10 +59,12 @@ type Bus struct {
 	TraceTimerEventCount     uint32
 	TracePage                bool
 	TracePageCount           uint32
+	TraceWebTVPort           bool
+	WebTVPortTraceCount      uint32
 }
 
 func NewBus() *Bus {
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1"}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -110,6 +117,20 @@ func ramMirror(p uint32, width uint32) (uint32, bool) {
 	return 0, false
 }
 
+const webTVPortProbeAddress uint32 = 0x04FFFFF3
+const webTVPortProbeWordAddress uint32 = 0x04FFFFF0
+const webTVPortBase uint32 = 0x04F00000
+const webTVPortSize uint32 = 0x18
+const modemCharCycles uint64 = 14500
+
+func (b *Bus) traceWebTVPort(op string, p, width, value uint32) {
+	if !b.TraceWebTVPort || b.WebTVPortTraceCount >= 128 || !((p >= webTVPortBase && p < webTVPortBase+webTVPortSize && width <= webTVPortBase+webTVPortSize-p) || (p >= webTVPortProbeWordAddress && p < webTVPortProbeWordAddress+4 && width <= webTVPortProbeWordAddress+4-p)) || b.CPU == nil {
+		return
+	}
+	b.WebTVPortTraceCount++
+	fmt.Printf("WebTV port %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X width=%d val=0x%08X v0=0x%08X a0=0x%08X a1=0x%08X ra=0x%08X\n", op, b.WebTVPortTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), p, width, value, uint32(b.CPU.Regs[2]), uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[31]))
+}
+
 func (b *Bus) Read8(addr uint32) uint8 {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 1); ok {
@@ -126,6 +147,7 @@ func (b *Bus) Read8(addr uint32) uint8 {
 	if p >= 0x04000000 && p < 0x04010000 {
 		return uint8(b.Asic.Read(p & 0xFFFF))
 	}
+	b.traceWebTVPort("read", p, 1, 0xFF)
 	return 0xFF
 }
 
@@ -148,6 +170,7 @@ func (b *Bus) Read16(addr uint32) uint16 {
 	if p >= 0x1E400000 && p <= 0x1E80001F {
 		return uint16(b.IDE.Read32(p - 0x1E400000))
 	}
+	b.traceWebTVPort("read", p, 2, 0xFFFF)
 	return 0xFFFF
 }
 
@@ -185,6 +208,7 @@ func (b *Bus) Read32(addr uint32) uint32 {
 		off := p - ROM_BASE
 		return binary.BigEndian.Uint32(b.ROM[off:])
 	}
+	b.traceWebTVPort("read", p, 4, 0xFFFFFFFF)
 	return 0xFFFFFFFF
 }
 
@@ -196,7 +220,7 @@ func (b *Bus) tracePageRead(p, width uint32) {
 		start uint32
 		size  uint32
 		name  string
-	}{{0x1FD239F4, 420, "Startup.html"}, {0x1FD2FC34, 505, "Connecting.html"}, {0x1FD17554, 14384, "ConnectingTo.gif"}, {0x1FD1AD88, 4890, "CityRoad.gif"}}
+	}{{0x1FD23000, 600, "RemovePrinterAdapter.html"}, {0x1FD239F4, 420, "Startup.html"}, {0x1FD2FC34, 505, "Connecting.html"}, {0x1FD17554, 14384, "ConnectingTo.gif"}, {0x1FD1AD88, 4890, "CityRoad.gif"}}
 	for _, page := range ranges {
 		if p < page.start+page.size && p+width > page.start {
 			b.TracePageCount++
@@ -234,12 +258,14 @@ func (b *Bus) Write8(addr, val uint32) {
 			}
 		}
 		b.Asic.Write(p&0xFFFF, val)
+		b.updateModemIRQ()
 		return
 	}
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		b.modemWrite(p-0x1E000000, val, 1)
 		return
 	}
+	b.traceWebTVPort("write", p, 1, val)
 }
 
 func (b *Bus) Write16(addr, val uint32) {
@@ -270,12 +296,14 @@ func (b *Bus) Write16(addr, val uint32) {
 			}
 		}
 		b.Asic.Write(p&0xFFFF, val)
+		b.updateModemIRQ()
 		return
 	}
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		b.modemWrite(p-0x1E000000, val, 2)
 		return
 	}
+	b.traceWebTVPort("write", p, 2, val)
 }
 
 func (b *Bus) Write32(addr, val uint32) {
@@ -322,8 +350,10 @@ func (b *Bus) Write32(addr, val uint32) {
 			}
 		}
 		b.Asic.Write(p&0xFFFF, val)
+		b.updateModemIRQ()
 		return
 	}
+	b.traceWebTVPort("write", p, 4, val)
 }
 
 func (b *Bus) modemRead8(off uint32) uint8 {
@@ -379,6 +409,14 @@ func (b *Bus) modemRead8(off uint32) uint8 {
 	case 0x18:
 		v = b.ModemMSR
 		b.ModemMSR &^= 0x0F
+		if b.SyntheticPPP && b.CPU != nil && b.ModemStage >= 4 && b.ModemLink == nil && !b.ModemLCPQueued && v&0x80 != 0 {
+			b.ModemLCPQueued = true
+			frame := pppLCPConfigureRequest(1)
+			b.queueModemWireRX(frame)
+			if b.CPU != nil {
+				fmt.Printf("synthetic PPP LCP Configure-Request queued step=%d bytes=%d\n", b.CPU.Steps, len(frame))
+			}
+		}
 		b.updateModemIRQ()
 	default:
 		v = 0
@@ -479,6 +517,7 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 func (b *Bus) Tick(cycles uint64) {
 	b.Asic.Tick(cycles)
 	b.pollModemLink()
+	b.releaseModemRX()
 	if b.ModemReadyAt != 0 && b.Asic.Cycles >= b.ModemReadyAt {
 		b.ModemReadyAt = 0
 		old := b.ModemMSR & 0xF0
@@ -501,8 +540,7 @@ func (b *Bus) pollModemLink() {
 		return
 	}
 	if data := b.ModemLink.poll(); len(data) != 0 {
-		b.ModemRX = append(b.ModemRX, data...)
-		b.updateModemIRQ()
+		b.queueModemWireRX(data)
 	}
 }
 
@@ -511,19 +549,32 @@ func (b *Bus) queueModemRX(data []byte) {
 	b.updateModemIRQ()
 }
 
+func (b *Bus) queueModemWireRX(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+	b.ModemWireRX = append(b.ModemWireRX, data...)
+	if b.ModemNextRXAt == 0 || b.ModemNextRXAt <= b.Asic.Cycles {
+		b.ModemNextRXAt = b.Asic.Cycles + modemCharCycles
+	}
+	b.releaseModemRX()
+}
+
+func (b *Bus) releaseModemRX() {
+	if len(b.ModemRX) != 0 || len(b.ModemWireRX) == 0 || b.Asic.Cycles < b.ModemNextRXAt {
+		return
+	}
+	b.ModemRX = append(b.ModemRX, b.ModemWireRX[0])
+	b.ModemWireRX = b.ModemWireRX[1:]
+	b.ModemNextRXAt = b.Asic.Cycles + modemCharCycles
+	b.updateModemIRQ()
+}
+
 func (b *Bus) updateModemIRQ() {
-	pending := b.ModemMCR&0x08 != 0 && (len(b.ModemRX) != 0 && b.ModemIER&1 != 0 || b.ModemMSR&0x0F != 0 && b.ModemIER&8 != 0)
+	pending := len(b.ModemRX) != 0 && b.ModemIER&1 != 0 || b.ModemMSR&0x0F != 0 && b.ModemIER&8 != 0
 	if pending {
 		b.Asic.RIOIntStat |= 4
 		b.Asic.BusIntStat |= BUS_INT_RIO
-		return
-	}
-	if b.Asic.RIOIntStat&4 == 0 {
-		return
-	}
-	b.Asic.RIOIntStat &^= 4
-	if b.Asic.RIOIntStat&b.Asic.RIOIntEnable == 0 {
-		b.Asic.BusIntStat &^= BUS_INT_RIO
 	}
 }
 
