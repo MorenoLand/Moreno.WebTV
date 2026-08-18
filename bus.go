@@ -134,7 +134,7 @@ func (b *Bus) traceWebTVPort(op string, p, width, value uint32) {
 }
 
 func (b *Bus) traceDeviceObjectRead(rp, value uint32) {
-	if !b.TraceDeviceObject || b.DeviceObjectTraceCount >= 128 || rp != 0x588 || b.CPU == nil {
+	if !b.TraceDeviceObject || b.DeviceObjectTraceCount >= 128 || (rp != 0x400 && rp != 0x588) || b.CPU == nil {
 		return
 	}
 	b.DeviceObjectTraceCount++

@@ -1038,6 +1038,9 @@ func main() {
 				printCodeRange(bus, 0x802E6260, 0x802E62D0, "device clear caller")
 				printCodeRange(bus, 0x802E80C0, 0x802E8100, "device dereference")
 			}
+			if bus.TraceDeviceObject {
+				printCodeRange(bus, 0x802C5D00, 0x802C5E80, "modem event object setup")
+			}
 			ptr := binary.BigEndian.Uint32(bus.RAM[0x1C90:])
 			fmt.Printf("Final parser ptr=0x%08X around=%q\n", ptr, previewRAMString(bus, (ptr-96)&0x1FFFFFFF, 240))
 			printRangeSummary(bus, 0x00400000, 0x00100000, "final video-ish 0x80400000")
