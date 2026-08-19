@@ -61,6 +61,8 @@ type Bus struct {
 	TracePageCount           uint32
 	TraceWebTVPort           bool
 	WebTVPortTraceCount      uint32
+	TraceRIOControl          bool
+	RIOControlTraceCount     uint32
 	TraceDeviceObject        bool
 	DeviceObjectTraceCount   uint32
 	TracePacketQueue         bool
@@ -68,7 +70,7 @@ type Bus struct {
 }
 
 func NewBus() *Bus {
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -135,6 +137,19 @@ func (b *Bus) traceWebTVPort(op string, p, width, value uint32) {
 	fmt.Printf("WebTV port %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X width=%d val=0x%08X v0=0x%08X a0=0x%08X a1=0x%08X ra=0x%08X\n", op, b.WebTVPortTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), p, width, value, uint32(b.CPU.Regs[2]), uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[31]))
 }
 
+func (b *Bus) traceRIOControl(op string, off, width, value uint32) {
+	if !b.TraceRIOControl || b.RIOControlTraceCount >= 64 || b.CPU == nil {
+		return
+	}
+	switch off {
+	case 0x100C, 0x101C, 0x1020:
+	default:
+		return
+	}
+	b.RIOControlTraceCount++
+	fmt.Printf("RIO control %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X off=0x%04X width=%d val=0x%08X a0=0x%08X a1=0x%08X ra=0x%08X\n", op, b.RIOControlTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), off, width, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[31]))
+}
+
 func (b *Bus) traceDeviceObjectRead(rp, value uint32) {
 	if !b.TraceDeviceObject || b.DeviceObjectTraceCount >= 128 || (rp != 0x400 && rp != 0x588) || b.CPU == nil {
 		return
@@ -167,7 +182,10 @@ func (b *Bus) Read8(addr uint32) uint8 {
 		return b.modemRead8(p - 0x1E000000)
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
-		return uint8(b.Asic.Read(p & 0xFFFF))
+		off := p & 0xFFFF
+		v := b.Asic.Read(off)
+		b.traceRIOControl("read", off, 1, v&0xFF)
+		return uint8(v)
 	}
 	b.traceWebTVPort("read", p, 1, 0xFF)
 	return 0xFF
@@ -189,7 +207,10 @@ func (b *Bus) Read16(addr uint32) uint16 {
 		return uint16(b.modemRead8(p - 0x1E000000))
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
-		return uint16(b.Asic.Read(p & 0xFFFF))
+		off := p & 0xFFFF
+		v := b.Asic.Read(off)
+		b.traceRIOControl("read", off, 2, v&0xFFFF)
+		return uint16(v)
 	}
 	if p >= 0x1E400000 && p <= 0x1E80001F {
 		return uint16(b.IDE.Read32(p - 0x1E400000))
@@ -206,6 +227,7 @@ func (b *Bus) Read32(addr uint32) uint32 {
 		}
 		off := p & 0xFFFF
 		v := b.Asic.Read(off)
+		b.traceRIOControl("read", off, 4, v)
 		if off == 0x90A0 && b.CPU != nil {
 			b.RIOReadCnt++
 			if b.RIOReadCnt <= 32 || b.RIOReadCnt%100000 == 0 {
@@ -278,14 +300,16 @@ func (b *Bus) Write8(addr, val uint32) {
 		return
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
-		if (p&0xFFFF) == 0x90A8 && b.CPU != nil {
+		off := p & 0xFFFF
+		b.traceRIOControl("write", off, 1, val&0xFF)
+		if off == 0x90A8 && b.CPU != nil {
 			b.RIOWriteCnt++
 			if b.RIOWriteCnt <= 64 || b.RIOWriteCnt%1000 == 0 {
 				fmt.Printf("RIO write8 #%d step=%d PC=0x%08X execPC=0x%08X off=0x%04X val=0x%02X cycles=0x%016X ptr=0x%08X\n",
 					b.RIOWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, p&0xFFFF, val&0xFF, b.Asic.Cycles, binary.BigEndian.Uint32(b.RAM[0x1C90:]))
 			}
 		}
-		b.Asic.Write(p&0xFFFF, val)
+		b.Asic.Write(off, val)
 		b.updateModemIRQ()
 		return
 	}
@@ -317,14 +341,16 @@ func (b *Bus) Write16(addr, val uint32) {
 		return
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
-		if (p&0xFFFF) == 0x90A8 && b.CPU != nil {
+		off := p & 0xFFFF
+		b.traceRIOControl("write", off, 2, val&0xFFFF)
+		if off == 0x90A8 && b.CPU != nil {
 			b.RIOWriteCnt++
 			if b.RIOWriteCnt <= 64 || b.RIOWriteCnt%1000 == 0 {
 				fmt.Printf("RIO write16 #%d step=%d PC=0x%08X execPC=0x%08X off=0x%04X val=0x%04X cycles=0x%016X ptr=0x%08X\n",
 					b.RIOWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, p&0xFFFF, val&0xFFFF, b.Asic.Cycles, binary.BigEndian.Uint32(b.RAM[0x1C90:]))
 			}
 		}
-		b.Asic.Write(p&0xFFFF, val)
+		b.Asic.Write(off, val)
 		b.updateModemIRQ()
 		return
 	}
@@ -372,14 +398,16 @@ func (b *Bus) Write32(addr, val uint32) {
 		return
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
-		if (p&0xFFFF) == 0x90A8 && b.CPU != nil {
+		off := p & 0xFFFF
+		b.traceRIOControl("write", off, 4, val)
+		if off == 0x90A8 && b.CPU != nil {
 			b.RIOWriteCnt++
 			if b.RIOWriteCnt <= 64 || b.RIOWriteCnt%1000 == 0 {
 				fmt.Printf("RIO write32 #%d step=%d PC=0x%08X execPC=0x%08X off=0x%04X val=0x%08X cycles=0x%016X ptr=0x%08X\n",
 					b.RIOWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, p&0xFFFF, val, b.Asic.Cycles, binary.BigEndian.Uint32(b.RAM[0x1C90:]))
 			}
 		}
-		b.Asic.Write(p&0xFFFF, val)
+		b.Asic.Write(off, val)
 		b.updateModemIRQ()
 		return
 	}
