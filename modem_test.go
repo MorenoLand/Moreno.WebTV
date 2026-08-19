@@ -68,7 +68,25 @@ func TestModemUploadRequiresValidTerminator(t *testing.T) {
 	if bus.ModemStage != 3 || !bus.ModemFirmwareReady || len(bus.ModemRX) != 1 || bus.ModemSRAM[0x200] != 0x4C || bus.ModemSRAM[0x213] != 0xFE {
 		t.Fatalf("valid terminator did not complete upload: stage=%d ready=%v rx=%d", bus.ModemStage, bus.ModemFirmwareReady, len(bus.ModemRX))
 	}
+	if got := bus.Read32(0x1E000200); got == 0x4C {
+		t.Fatalf("modem SRAM leaked through normal UART bank: %08X", got)
+	}
+	bus.ModemBackdoor = true
 	if bus.Read8(0x1E000200) != 0x4C || bus.Read32(0x1E000200) != 0x4C {
-		t.Fatalf("modem SRAM mapping read8=%02X read32=%08X", bus.Read8(0x1E000200), bus.Read32(0x1E000200))
+		t.Fatalf("modem SRAM backdoor mapping read8=%02X read32=%08X", bus.Read8(0x1E000200), bus.Read32(0x1E000200))
+	}
+}
+
+func TestModemBackdoorUsesNormalAperture(t *testing.T) {
+	bus := NewBus()
+	bus.ModemSRAM[0] = 0xA5
+	bus.ModemBackdoor = true
+	if got := bus.Read32(0x1E000000); got != 0xA5 {
+		t.Fatalf("backdoor SRAM base read = 0x%08X, want 0xA5", got)
+	}
+	bus.ModemBackdoor = false
+	bus.queueModemRX([]byte{0x5A})
+	if got := bus.Read8(0x1E000000); got != 0x5A {
+		t.Fatalf("normal UART bank read = 0x%02X, want 0x5A", got)
 	}
 }

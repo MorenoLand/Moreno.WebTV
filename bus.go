@@ -61,6 +61,7 @@ type Bus struct {
 	ModemMSR                 uint8
 	ModemDLL                 uint8
 	ModemDLM                 uint8
+	ModemBackdoor            bool
 	ModemReadyAt             uint64
 	ModemLink                *modemTCPLink
 	SkipNullCleanup          bool
@@ -228,8 +229,7 @@ func (b *Bus) tracePacketQueue(op string, rp, width, value uint32) {
 
 func modemSRAMOffset(p, width uint32) (uint32, bool) {
 	const base = uint32(0x1E000000)
-	const uartSize = uint32(0x20)
-	if p < base+uartSize {
+	if p < base {
 		return 0, false
 	}
 	offset := p - base
@@ -253,11 +253,12 @@ func (b *Bus) Read8(addr uint32) uint8 {
 		off := p - ROM_BASE
 		return b.ROM[off]
 	}
-	if p >= 0x1E000000 && p < 0x1E000020 {
+	if b.ModemBackdoor {
+		if off, ok := modemSRAMOffset(p, 1); ok {
+			return b.ModemSRAM[off]
+		}
+	} else if p >= 0x1E000000 && p < 0x1E000020 {
 		return b.modemRead8(p - 0x1E000000)
-	}
-	if off, ok := modemSRAMOffset(p, 1); ok {
-		return b.ModemSRAM[off]
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
 		off := p & 0xFFFF
@@ -283,11 +284,12 @@ func (b *Bus) Read16(addr uint32) uint16 {
 		off := p - ROM_BASE
 		return binary.BigEndian.Uint16(b.ROM[off:])
 	}
-	if p >= 0x1E000000 && p < 0x1E000020 {
+	if b.ModemBackdoor {
+		if off, ok := modemSRAMOffset(p, 2); ok {
+			return uint16(b.ModemSRAM[off])
+		}
+	} else if p >= 0x1E000000 && p < 0x1E000020 {
 		return uint16(b.modemRead8(p - 0x1E000000))
-	}
-	if off, ok := modemSRAMOffset(p, 2); ok {
-		return uint16(b.ModemSRAM[off])
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
 		off := p & 0xFFFF
@@ -323,11 +325,12 @@ func (b *Bus) Read32(addr uint32) uint32 {
 	if p >= 0x1E400000 && p <= 0x1E80001F {
 		return b.IDE.Read32(p - 0x1E400000)
 	}
-	if p >= 0x1E000000 && p < 0x1E000020 {
+	if b.ModemBackdoor {
+		if off, ok := modemSRAMOffset(p, 4); ok {
+			return uint32(b.ModemSRAM[off])
+		}
+	} else if p >= 0x1E000000 && p < 0x1E000020 {
 		return uint32(b.modemRead8(p - 0x1E000000))
-	}
-	if off, ok := modemSRAMOffset(p, 4); ok {
-		return uint32(b.ModemSRAM[off])
 	}
 	if rp, ok := ramMirror(p, 4); ok {
 		v := binary.BigEndian.Uint32(b.RAM[rp:])
@@ -404,12 +407,13 @@ func (b *Bus) Write8(addr, val uint32) {
 		b.updateModemIRQ()
 		return
 	}
-	if p >= 0x1E000000 && p < 0x1E000020 {
+	if b.ModemBackdoor {
+		if off, ok := modemSRAMOffset(p, 1); ok {
+			b.ModemSRAM[off] = byte(val)
+			return
+		}
+	} else if p >= 0x1E000000 && p < 0x1E000020 {
 		b.modemWrite(p-0x1E000000, val, 1)
-		return
-	}
-	if off, ok := modemSRAMOffset(p, 1); ok {
-		b.ModemSRAM[off] = byte(val)
 		return
 	}
 	b.traceWebTVPort("write", p, 1, val)
@@ -452,12 +456,13 @@ func (b *Bus) Write16(addr, val uint32) {
 		b.updateModemIRQ()
 		return
 	}
-	if p >= 0x1E000000 && p < 0x1E000020 {
+	if b.ModemBackdoor {
+		if off, ok := modemSRAMOffset(p, 2); ok {
+			b.ModemSRAM[off] = byte(val)
+			return
+		}
+	} else if p >= 0x1E000000 && p < 0x1E000020 {
 		b.modemWrite(p-0x1E000000, val, 2)
-		return
-	}
-	if off, ok := modemSRAMOffset(p, 2); ok {
-		b.ModemSRAM[off] = byte(val)
 		return
 	}
 	b.traceWebTVPort("write", p, 2, val)
@@ -478,12 +483,13 @@ func (b *Bus) Write32(addr, val uint32) {
 		b.IDE.Write32(p-0x1E400000, val)
 		return
 	}
-	if p >= 0x1E000000 && p < 0x1E000020 {
+	if b.ModemBackdoor {
+		if off, ok := modemSRAMOffset(p, 4); ok {
+			b.ModemSRAM[off] = byte(val)
+			return
+		}
+	} else if p >= 0x1E000000 && p < 0x1E000020 {
 		b.modemWrite(p-0x1E000000, val, 4)
-		return
-	}
-	if off, ok := modemSRAMOffset(p, 4); ok {
-		b.ModemSRAM[off] = byte(val)
 		return
 	}
 	if rp, ok := ramMirror(p, 4); ok {
