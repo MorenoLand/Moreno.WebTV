@@ -199,6 +199,22 @@ func webTVPortResponse(p, width uint32) (uint32, bool) {
 		if p == webTVPortProbeWordAddress && width == 4 {
 			return 2, true
 		}
+	case "type0", "type1", "type3", "type4":
+		if p == webTVPortProbeAddress && width == 1 {
+			switch os.Getenv("WEBTV_WTV_PORT_RESPONSE") {
+			case "type0":
+				return 0, true
+			case "type1":
+				return 1, true
+			case "type3":
+				return 3, true
+			default:
+				return 4, true
+			}
+		}
+		if p == webTVPortProbeWordAddress && width == 4 {
+			return 0xFFFFFFFF, true
+		}
 	case "secondary-type2":
 		if p == webTVPortSecondaryProbeAddress && width == 1 {
 			return 2, true
