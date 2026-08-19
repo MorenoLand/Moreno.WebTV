@@ -1157,6 +1157,9 @@ func main() {
 		fmt.Printf("  0x%04X = 0x%08X\n", o, bus.Asic.WriteLog[o])
 	}
 	bus.Asic.PrintTopReads(10)
+	if os.Getenv("WEBTV_TRACE_ASIC_GAPS") == "1" {
+		bus.Asic.PrintUnmodeledAccesses()
+	}
 
 	read32 := func(off uint32) uint32 {
 		if off+3 < RAM_SIZE {

@@ -3,17 +3,20 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 )
 
 type SoloASIC struct {
-	ReadHits  map[uint32]uint64
-	Regs      map[uint32]uint32
-	WriteLog  map[uint32]uint32
-	ChipID    uint32
-	SysConfig uint32
-	CHPCntl   uint32
-	WDEnable  bool
-	WDValue   uint32
+	ReadHits           map[uint32]uint64
+	Regs               map[uint32]uint32
+	WriteLog           map[uint32]uint32
+	UnmodeledReadHits  map[uint32]uint64
+	UnmodeledWriteHits map[uint32]uint64
+	ChipID             uint32
+	SysConfig          uint32
+	CHPCntl            uint32
+	WDEnable           bool
+	WDValue            uint32
 
 	BusIntEnable uint32
 	BusIntStat   uint32
@@ -112,17 +115,19 @@ const videoFramePeriodCycles = 2783333
 
 func NewSoloASIC() *SoloASIC {
 	a := &SoloASIC{
-		ChipID:      0x03120000,
-		SysConfig:   0x003f8700,
-		VIDNStart:   0x80000000,
-		MemTiming:   0xADBADFFA,
-		MemCntl:     0x03,
-		MemRefCnt:   0x0400,
-		PPortStatus: 0,
-		LEDState:    0xFFFFFFFF,
-		ResetCause:  2, // RESETCAUSE_WATCHDOG per MAME device_reset()
-		ReadHits:    make(map[uint32]uint64),
-		Regs:        make(map[uint32]uint32),
+		ChipID:             0x03120000,
+		SysConfig:          0x003f8700,
+		VIDNStart:          0x80000000,
+		MemTiming:          0xADBADFFA,
+		MemCntl:            0x03,
+		MemRefCnt:          0x0400,
+		PPortStatus:        0,
+		LEDState:           0xFFFFFFFF,
+		ResetCause:         2, // RESETCAUSE_WATCHDOG per MAME device_reset()
+		ReadHits:           make(map[uint32]uint64),
+		Regs:               make(map[uint32]uint32),
+		UnmodeledReadHits:  make(map[uint32]uint64),
+		UnmodeledWriteHits: make(map[uint32]uint64),
 	}
 	a.I2C.SDA = 1
 	return a
@@ -275,6 +280,7 @@ func (a *SoloASIC) Read(off uint32) uint32 {
 	case 0x300C:
 		return a.VIDNStart
 	default:
+		a.UnmodeledReadHits[off]++
 		if v, ok := a.Regs[off]; ok {
 			return v
 		}
@@ -500,7 +506,37 @@ func (a *SoloASIC) Write(off, data uint32) {
 	case 0x300C:
 		a.VIDNStart = data
 	default:
+		a.UnmodeledWriteHits[off]++
 		a.Regs[off] = data
+	}
+}
+
+func (a *SoloASIC) PrintUnmodeledAccesses() {
+	readOffsets := make([]uint32, 0, len(a.UnmodeledReadHits))
+	for off := range a.UnmodeledReadHits {
+		readOffsets = append(readOffsets, off)
+	}
+	sort.Slice(readOffsets, func(i, j int) bool { return readOffsets[i] < readOffsets[j] })
+	fmt.Printf("Unmodeled ASIC reads:\n")
+	if len(readOffsets) == 0 {
+		fmt.Printf("  (none)\n")
+	} else {
+		for _, off := range readOffsets {
+			fmt.Printf("  0x%04X: %d reads\n", off, a.UnmodeledReadHits[off])
+		}
+	}
+	writeOffsets := make([]uint32, 0, len(a.UnmodeledWriteHits))
+	for off := range a.UnmodeledWriteHits {
+		writeOffsets = append(writeOffsets, off)
+	}
+	sort.Slice(writeOffsets, func(i, j int) bool { return writeOffsets[i] < writeOffsets[j] })
+	fmt.Printf("Unmodeled ASIC writes:\n")
+	if len(writeOffsets) == 0 {
+		fmt.Printf("  (none)\n")
+	} else {
+		for _, off := range writeOffsets {
+			fmt.Printf("  0x%04X: %d writes\n", off, a.UnmodeledWriteHits[off])
+		}
 	}
 }
 
