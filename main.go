@@ -1029,8 +1029,12 @@ func main() {
 				printAccessImmRefs(bus, 0x1A40, 64)
 				printAccessImmRefs(bus, 0x1A44, 64)
 				printAccessImmRefs(bus, 0x1A48, 64)
+				printJALRefs(bus, 0x80243480, 32)
+				printJALRefs(bus, 0x80243F50, 32)
 				printCodeRange(bus, 0x8024E740, 0x8024E7C0, "packet queue initializer")
+				printCodeRange(bus, 0x80243420, 0x80243460, "packet queue parser prelude")
 				printCodeRange(bus, 0x80243460, 0x802434B0, "packet queue parser entry")
+				printCodeRange(bus, 0x80243F40, 0x80243FC0, "packet queue secondary consumer")
 			}
 			if os.Getenv("WEBTV_TRACE_WTV_PORT") == "1" {
 				printCodeRange(bus, 0x80229A80, 0x80229C40, "WebTV port probe")
