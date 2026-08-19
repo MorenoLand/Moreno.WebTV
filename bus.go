@@ -174,6 +174,33 @@ func (b *Bus) traceWebTVPort(op string, p, width, value uint32) {
 	fmt.Printf("WebTV port %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X width=%d val=0x%08X v0=0x%08X a0=0x%08X a1=0x%08X ra=0x%08X\n", op, b.WebTVPortTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), p, width, value, uint32(b.CPU.Regs[2]), uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[31]))
 }
 
+func webTVPortResponse(p, width uint32) (uint32, bool) {
+	switch os.Getenv("WEBTV_WTV_PORT_RESPONSE") {
+	case "type2":
+		if p == webTVPortProbeAddress && width == 1 {
+			return 2, true
+		}
+		if p == webTVPortProbeWordAddress && width == 4 {
+			return 0xFFFFFFFF, true
+		}
+	case "type2-zero":
+		if p == webTVPortProbeAddress && width == 1 {
+			return 2, true
+		}
+		if p == webTVPortProbeWordAddress && width == 4 {
+			return 0, true
+		}
+	case "type2-word2":
+		if p == webTVPortProbeAddress && width == 1 {
+			return 2, true
+		}
+		if p == webTVPortProbeWordAddress && width == 4 {
+			return 2, true
+		}
+	}
+	return 0, false
+}
+
 func (b *Bus) traceRIOControl(op string, off, width, value uint32) {
 	if !b.TraceRIOControl || b.RIOControlTraceCount >= 64 || b.CPU == nil {
 		return
@@ -266,6 +293,10 @@ func (b *Bus) Read8(addr uint32) uint8 {
 		b.traceRIOControl("read", off, 1, v&0xFF)
 		return uint8(v)
 	}
+	if v, ok := webTVPortResponse(p, 1); ok {
+		b.traceWebTVPort("read", p, 1, v)
+		return uint8(v)
+	}
 	b.traceWebTVPort("read", p, 1, 0xFF)
 	return 0xFF
 }
@@ -299,6 +330,10 @@ func (b *Bus) Read16(addr uint32) uint16 {
 	}
 	if p >= 0x1E400000 && p <= 0x1E80001F {
 		return uint16(b.IDE.Read32(p - 0x1E400000))
+	}
+	if v, ok := webTVPortResponse(p, 2); ok {
+		b.traceWebTVPort("read", p, 2, v)
+		return uint16(v)
 	}
 	b.traceWebTVPort("read", p, 2, 0xFFFF)
 	return 0xFFFF
@@ -347,6 +382,10 @@ func (b *Bus) Read32(addr uint32) uint32 {
 		b.tracePageRead(p, 4)
 		off := p - ROM_BASE
 		return binary.BigEndian.Uint32(b.ROM[off:])
+	}
+	if v, ok := webTVPortResponse(p, 4); ok {
+		b.traceWebTVPort("read", p, 4, v)
+		return v
 	}
 	b.traceWebTVPort("read", p, 4, 0xFFFFFFFF)
 	return 0xFFFFFFFF
