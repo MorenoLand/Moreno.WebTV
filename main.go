@@ -1009,6 +1009,7 @@ func main() {
 			printJALRefs(bus, 0x80222E68, 32)
 			printLoadImmRefs(bus, 0xA0000400, 32)
 			printAccessImmRefs(bus, 0x0188, 32)
+			printStoreImmRefs(bus, 0x0188, 64)
 			printAccessImmRefs(bus, 0x018C, 32)
 			printAccessImmRefs(bus, 0x0190, 32)
 			printCodeRange(bus, 0x80222E20, 0x80223180, "device base func")
