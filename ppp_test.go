@@ -55,3 +55,16 @@ func TestPPPDecoderRejectsBadFCSAndAcceptsCompressedHeader(t *testing.T) {
 		t.Fatalf("compressed header decoded=%+v", packets)
 	}
 }
+
+func TestBusTracksFragmentedIncomingPPPFrame(t *testing.T) {
+	bus := NewBus()
+	frame := pppLCPConfigureRequest(2)
+	bus.queueModemWireRX(frame[:3])
+	if bus.ModemPPPFrames != 0 {
+		t.Fatalf("partial frame count=%d", bus.ModemPPPFrames)
+	}
+	bus.queueModemWireRX(frame[3:])
+	if bus.ModemPPPFrames != 1 || bus.ModemLastPPPProtocol != pppLCP || len(bus.ModemLastPPPInfo) != 4 {
+		t.Fatalf("decoded frames=%d protocol=0x%04X info=% X", bus.ModemPPPFrames, bus.ModemLastPPPProtocol, bus.ModemLastPPPInfo)
+	}
+}

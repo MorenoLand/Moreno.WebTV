@@ -40,10 +40,15 @@ type Bus struct {
 	ModemFirmwareBytes       int
 	ModemFirmwareReady       bool
 	ModemPPPBytes            int
+	ModemPPPFrames           uint64
+	ModemLastPPPProtocol     uint16
+	ModemLastPPPInfo         []byte
 	ModemLCPQueued           bool
 	ModemWireRX              []byte
 	ModemNextRXAt            uint64
+	ModemPPPDecoder          pppDecoder
 	SyntheticPPP             bool
+	TraceModemPPP            bool
 	CompatShims              bool
 	ModemIER                 uint8
 	ModemLCR                 uint8
@@ -82,7 +87,7 @@ type Bus struct {
 }
 
 func NewBus() *Bus {
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ModemFirmware: make(map[uint32]byte)}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ModemFirmware: make(map[uint32]byte)}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -690,6 +695,14 @@ func (b *Bus) queueModemRX(data []byte) {
 func (b *Bus) queueModemWireRX(data []byte) {
 	if len(data) == 0 {
 		return
+	}
+	for _, packet := range b.ModemPPPDecoder.Push(data) {
+		b.ModemPPPFrames++
+		b.ModemLastPPPProtocol = packet.Protocol
+		b.ModemLastPPPInfo = append(b.ModemLastPPPInfo[:0], packet.Information...)
+		if b.TraceModemPPP && b.CPU != nil {
+			fmt.Printf("modem PPP RX frame #%d step=%d protocol=0x%04X infoBytes=%d\n", b.ModemPPPFrames, b.CPU.Steps, packet.Protocol, len(packet.Information))
+		}
 	}
 	b.ModemWireRX = append(b.ModemWireRX, data...)
 	if b.ModemNextRXAt == 0 || b.ModemNextRXAt <= b.Asic.Cycles {

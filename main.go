@@ -1182,7 +1182,7 @@ func main() {
 		fmt.Printf("IDE sector reads: %d\n", bus.IDE.ReadCount)
 	}
 	fmt.Printf("Modem stage=%d reads=%d writes=%d rx=%d wire=%d ier=0x%02X lcr=0x%02X mcr=0x%02X msr=0x%02X nextRX=0x%016X rioStat=0x%08X rioEn=0x%08X\n", bus.ModemStage, bus.ModemReadCnt, bus.ModemWriteCnt, len(bus.ModemRX), len(bus.ModemWireRX), bus.ModemIER, bus.ModemLCR, bus.ModemMCR, bus.ModemMSR, bus.ModemNextRXAt, bus.Asic.RIOIntStat, bus.Asic.RIOIntEnable)
-	fmt.Printf("Modem post-carrier writes=%d txBytes=%d\n", bus.ModemPostCarrierWrites, bus.ModemPostCarrierTXBytes)
+	fmt.Printf("Modem post-carrier writes=%d txBytes=%d pppFrames=%d lastPPP=0x%04X infoBytes=%d\n", bus.ModemPostCarrierWrites, bus.ModemPostCarrierTXBytes, bus.ModemPPPFrames, bus.ModemLastPPPProtocol, len(bus.ModemLastPPPInfo))
 	fmt.Printf("ASIC final IRQ BusStat=0x%08X BusEn=0x%08X TimStat=0x%08X TimEn=0x%08X TimerCompare=0x%08X SysTimerNext=0x%016X Cycles=0x%016X\n", bus.Asic.BusIntStat, bus.Asic.BusIntEnable, bus.Asic.TimIntStat, bus.Asic.TimIntEnable, bus.Asic.TimerCompare, bus.Asic.SysTimerNext, bus.Asic.Cycles)
 	fmt.Printf("Written ASIC registers:\n")
 	offs := make([]uint32, 0, len(bus.Asic.WriteLog))
