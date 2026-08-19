@@ -167,6 +167,7 @@ func main() {
 			irqCodeDumped := false
 			newLoopDumped := false
 			videoFlowHits := 0
+			videoCallbackHits := 0
 			framebufferFlowHits := 0
 			framebufferCallerHits := 0
 			lastResolverKey := ""
@@ -190,6 +191,10 @@ func main() {
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x8022BCB0 && cpu.PC < 0x8022BD30 && framebufferCallerHits < 128 {
 					framebufferCallerHits++
 					fmt.Printf("framebuffer caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X\n", framebufferCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart)
+				}
+				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x802C7660 && cpu.PC < 0x802C76F8 && videoCallbackHits < 128 {
+					videoCallbackHits++
+					fmt.Printf("video callback flow #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X b2240=0x%08X b224E=0x%02X\n", videoCallbackHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart, bus.Read32(0x80002240), bus.Read8(0x8000224E))
 				}
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x8022BDD0 && cpu.PC < 0x8022BE60 && framebufferFlowHits < 128 {
 					framebufferFlowHits++
@@ -1110,6 +1115,7 @@ func main() {
 				printCodeRange(bus, 0x8022BC80, 0x8022BD30, "framebuffer caller")
 				printJALRefs(bus, 0x8022BCEC, 64)
 				printJALRefs(bus, 0x8022BDD0, 64)
+				printJALRefs(bus, 0x802C7660, 64)
 				printCodeRange(bus, 0x802C7660, 0x802C7710, "video callback caller")
 				printCodeRange(bus, 0x80264480, 0x80264640, "post-gate video loop")
 				printCodeRange(bus, 0x802768C0, 0x80276B20, "post-gate video caller")
