@@ -1074,6 +1074,8 @@ func main() {
 				printCodeRange(bus, 0x80229F20, 0x80229FA0, "packet queue dispatch helper")
 				printCodeRange(bus, 0x80229F20, 0x8022A080, "packet queue dispatch helper extended")
 				printCodeRange(bus, 0x8022A700, 0x8022A780, "packet queue release helper")
+				printCodeRange(bus, 0x8022A2D0, 0x8022A3C0, "packet queue object helper")
+				printCodeRange(bus, 0x8022A720, 0x8022A7E0, "packet queue scheduler helper")
 				printCodeRange(bus, 0x802221C0, 0x80222220, "packet queue allocation helper")
 				printCodeRange(bus, 0x8023FDE0, 0x8023FE40, "packet queue byte helper")
 				printCodeRange(bus, 0x80229D40, 0x80229DA0, "packet queue list helper")
