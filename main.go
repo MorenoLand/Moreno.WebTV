@@ -195,7 +195,7 @@ func main() {
 					framebufferFlowHits++
 					fmt.Printf("framebuffer flow #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X\n", framebufferFlowHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart)
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && ((cpu.PC >= 0x802C44D0 && cpu.PC < 0x802C4660) || (cpu.PC >= 0x8022A680 && cpu.PC < 0x8022A720) || (cpu.PC >= 0x8022C240 && cpu.PC < 0x8022C360) || (cpu.PC >= 0x8022BD80 && cpu.PC < 0x8022BE60)) && videoFlowHits < 256 {
+				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && ((cpu.PC >= 0x802C44D0 && cpu.PC < 0x802C4660) || (cpu.PC >= 0x8022A680 && cpu.PC < 0x8022A720) || (cpu.PC >= 0x8022C240 && cpu.PC < 0x8022C360) || (cpu.PC >= 0x8022BD80 && cpu.PC < 0x8022BE60) || (cpu.PC >= 0x802C7660 && cpu.PC < 0x802C7710)) && videoFlowHits < 256 {
 					videoFlowHits++
 					fmt.Printf("video flow #%d step=%d PC=0x%08X inst=0x%08X excPC=0x%08X Status=0x%08X Cause=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X VIDStat=0x%08X VIDEn=0x%08X BusStat=0x%08X BusEn=0x%08X objB218=0x%08X\n", videoFlowHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.excPC, cpu.COP0[Status], cpu.COP0[Cause], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart, bus.Asic.VIDIntStat, bus.Asic.VIDIntEnable, bus.Asic.BusIntStat, bus.Asic.BusIntEnable, binary.BigEndian.Uint32(bus.RAM[0xB218:]))
 				}
@@ -1108,8 +1108,9 @@ func main() {
 				printCodeRange(bus, 0x8022C240, 0x8022C360, "video irq handler")
 				printCodeRange(bus, 0x8022BD80, 0x8022BE60, "framebuffer start path")
 				printCodeRange(bus, 0x8022BC80, 0x8022BD30, "framebuffer caller")
-				printJALRefs(bus, 0x8022BCE8, 64)
+				printJALRefs(bus, 0x8022BCEC, 64)
 				printJALRefs(bus, 0x8022BDD0, 64)
+				printCodeRange(bus, 0x802C7660, 0x802C7710, "video callback caller")
 				printCodeRange(bus, 0x80264480, 0x80264640, "post-gate video loop")
 				printCodeRange(bus, 0x802768C0, 0x80276B20, "post-gate video caller")
 			}
