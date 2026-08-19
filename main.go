@@ -174,6 +174,7 @@ func main() {
 			framebufferDirectCallerHits := 0
 			framebufferStateHits := 0
 			displayCallerHits := 0
+			displayDispatchHits := 0
 			lastResolverKey := ""
 			bus.Tracking = os.Getenv("WEBTV_TRACE_BUS") == "1"
 			compatShims := os.Getenv("WEBTV_COMPAT_SHIMS") == "1"
@@ -207,6 +208,10 @@ func main() {
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && displayCallerHits < 256 && ((cpu.PC >= 0x80215680 && cpu.PC < 0x80215790) || (cpu.PC >= 0x80215980 && cpu.PC < 0x80215AA0) || (cpu.PC >= 0x80221080 && cpu.PC < 0x80221180)) {
 					displayCallerHits++
 					fmt.Printf("display caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X state1710=0x%08X state1714=0x%08X state1718=0x%08X state1930=0x%08X state6754=0x%08X VID_NSTART=0x%08X\n", displayCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], bus.Read32(0x80001710), bus.Read32(0x80001714), bus.Read32(0x80001718), bus.Read32(0x80001930), bus.Read32(0x80006754), bus.Asic.VIDNStart)
+				}
+				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && displayDispatchHits < 512 && cpu.PC >= 0x80215400 && cpu.PC < 0x80215B00 {
+					displayDispatchHits++
+					fmt.Printf("display dispatch #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X table208B8=0x%08X tableData=0x%08X state1710=0x%08X state1714=0x%08X\n", displayDispatchHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Read32(0x8032FB14), bus.Read32(0x8032F8DC), bus.Read32(0x80001710), bus.Read32(0x80001714))
 				}
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x802C74E0 && cpu.PC < 0x802C7660 && videoCallbackDispatchHits < 256 {
 					videoCallbackDispatchHits++
@@ -1165,6 +1170,8 @@ func main() {
 				printJALRefs(bus, 0x802207B0, 64)
 				printJALRefs(bus, 0x802208B8, 64)
 				printJALRefs(bus, 0x80220F34, 64)
+				printJALRefs(bus, 0x8021542C, 64)
+				printJALRefs(bus, 0x80215960, 64)
 				printWordRefs(bus, 0x802146F8, 64)
 				printWordRefs(bus, 0x8021C680, 64)
 				printWordRefs(bus, 0x8021C9C0, 64)
@@ -1174,6 +1181,8 @@ func main() {
 				printWordRefs(bus, 0x802207B0, 64)
 				printWordRefs(bus, 0x802208B8, 64)
 				printWordRefs(bus, 0x80220F34, 64)
+				printWordRefs(bus, 0x8021542C, 64)
+				printWordRefs(bus, 0x80215960, 64)
 				printJALRefs(bus, 0x80215758, 64)
 				printJALRefs(bus, 0x80215A5C, 64)
 				printWordRefs(bus, 0x80215758, 64)
