@@ -915,7 +915,7 @@ func (b *Bus) seedModemQueueProbe() {
 	b.ModemQueueProbeSeeded = true
 	ptr := b.ModemQueueProbePtr
 	mask := b.ModemQueueProbeMask
-	b.Write32(ptr+0x0C, 0x00000010)
+	b.Write32(ptr+0x0C, 0x00000004)
 	b.Write32(ptr+0x14, 0)
 	b.Write32(ptr+0x18, mask)
 	b.Write32(0x80001A3C, ptr)
