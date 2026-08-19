@@ -317,7 +317,7 @@ func (b *Bus) tracePacketQueue(op string, rp, width, value uint32) {
 	if b.ProbeModemQueue && b.ModemQueueProbePtr != 0 {
 		nodeBase = b.phys(b.ModemQueueProbePtr)
 	}
-	node := b.TracePacketQueue && b.ProbeModemQueue && nodeBase != 0 && rp >= nodeBase && rp+width <= nodeBase+0x40
+	node := b.TracePacketQueue && b.ProbeModemQueue && nodeBase != 0 && rp >= nodeBase && rp+width <= nodeBase+0x80
 	if !b.TracePacketQueue || b.PacketQueueTraceCount >= 512 || (!global && !node) || b.CPU == nil {
 		return
 	}
@@ -915,8 +915,11 @@ func (b *Bus) seedModemQueueProbe() {
 	b.ModemQueueProbeSeeded = true
 	ptr := b.ModemQueueProbePtr
 	mask := b.ModemQueueProbeMask
+	for offset := uint32(0); offset < 0x40; offset += 4 {
+		b.Write32(ptr+offset, 0)
+	}
+	b.Write32(ptr+0x04, ptr+0x40)
 	b.Write32(ptr+0x0C, 0x00000004)
-	b.Write32(ptr+0x14, 0)
 	b.Write32(ptr+0x18, mask)
 	b.Write32(0x80001A3C, ptr)
 	b.Write32(0x80001A40, mask)

@@ -18,6 +18,9 @@ func TestModemQueueProbeSeedsObservedQueueWords(t *testing.T) {
 	if got := bus.Read32(0x807F000C); got != 0x4 {
 		t.Fatalf("queue flags=0x%08X, want 4", got)
 	}
+	if got := bus.Read32(0x807F0004); got != 0x807F0040 {
+		t.Fatalf("queue target=0x%08X, want 0x807F0040", got)
+	}
 	if got := bus.Read32(0x807F0018); got != 2 {
 		t.Fatalf("queue mask field=0x%08X, want 2", got)
 	}
