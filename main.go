@@ -157,6 +157,7 @@ func main() {
 			modemCodeDumped := false
 			eventPushCallerHits := 0
 			eventPushFuncHits := 0
+			eventObjectFlowHits := 0
 			devicePtrFuncHits := 0
 			devicePtrCodeDumped := false
 			timeFuncHits := 0
@@ -592,6 +593,18 @@ func main() {
 					eventPushFuncHits++
 					fmt.Printf("event push func hit %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X g1E74=%08X\n",
 						eventPushFuncHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1E74:]))
+				}
+				if bus.TraceDeviceObject && cpu.PC >= 0x802C5E84 && cpu.PC < 0x802C5F50 && eventObjectFlowHits < 96 {
+					eventObjectFlowHits++
+					obj := uint32(cpu.Regs[16]) & 0x1FFFFFFF
+					field188, field18C, field190 := uint32(0), uint32(0), uint32(0)
+					if obj+0x193 < uint32(len(bus.RAM)) {
+						field188 = binary.BigEndian.Uint32(bus.RAM[obj+0x188:])
+						field18C = binary.BigEndian.Uint32(bus.RAM[obj+0x18C:])
+						field190 = binary.BigEndian.Uint32(bus.RAM[obj+0x190:])
+					}
+					fmt.Printf("event object flow %03d step=%d PC=0x%08X inst=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X s2=0x%08X ra=0x%08X objPhys=0x%08X f188=0x%08X f18C=0x%08X f190=0x%08X low400=0x%08X low588=0x%08X g1CF8=0x%08X\n",
+						eventObjectFlowHits, step, cpu.PC, bus.Read32(cpu.PC), uint32(cpu.Regs[4]), uint32(cpu.Regs[5]), uint32(cpu.Regs[16]), uint32(cpu.Regs[17]), uint32(cpu.Regs[18]), uint32(cpu.Regs[31]), obj, field188, field18C, field190, binary.BigEndian.Uint32(bus.RAM[0x400:]), binary.BigEndian.Uint32(bus.RAM[0x588:]), binary.BigEndian.Uint32(bus.RAM[0x1CF8:]))
 				}
 				if cpu.PC >= 0x80222E58 && cpu.PC < 0x80222F20 && devicePtrFuncHits < 160 {
 					devicePtrFuncHits++
