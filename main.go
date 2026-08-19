@@ -172,6 +172,7 @@ func main() {
 			framebufferFlowHits := 0
 			framebufferCallerHits := 0
 			framebufferDirectCallerHits := 0
+			framebufferStateHits := 0
 			lastResolverKey := ""
 			bus.Tracking = os.Getenv("WEBTV_TRACE_BUS") == "1"
 			compatShims := os.Getenv("WEBTV_COMPAT_SHIMS") == "1"
@@ -197,6 +198,10 @@ func main() {
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && framebufferDirectCallerHits < 256 && ((cpu.PC >= 0x80215D80 && cpu.PC < 0x80215DE0) || (cpu.PC >= 0x80220820 && cpu.PC < 0x80220880) || (cpu.PC >= 0x80220AC0 && cpu.PC < 0x80220B40) || (cpu.PC >= 0x80220F40 && cpu.PC < 0x80220FC0) || (cpu.PC >= 0x80220FD0 && cpu.PC < 0x80221090)) {
 					framebufferDirectCallerHits++
 					fmt.Printf("framebuffer direct caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X VID_NSTART=0x%08X b2240=0x%08X b224E=0x%02X\n", framebufferDirectCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], bus.Asic.VIDNStart, bus.Read32(0x80002240), bus.Read8(0x8000224E))
+				}
+				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && framebufferStateHits < 256 && ((cpu.PC >= 0x80214740 && cpu.PC < 0x802147B0) || (cpu.PC >= 0x8021C6C0 && cpu.PC < 0x8021C720) || (cpu.PC >= 0x8021C9F0 && cpu.PC < 0x8021CA60) || (cpu.PC >= 0x8021D000 && cpu.PC < 0x8021D070) || (cpu.PC >= 0x80220870 && cpu.PC < 0x802208C0) || (cpu.PC >= 0x80220A80 && cpu.PC < 0x80220B30)) {
+					framebufferStateHits++
+					fmt.Printf("framebuffer state #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X state1710=0x%08X state1718=0x%08X state1930=0x%08X state6340=0x%08X state6754=0x%08X VID_NSTART=0x%08X\n", framebufferStateHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], bus.Read32(0x80001710), bus.Read32(0x80001718), bus.Read32(0x80001930), bus.Read32(0x80006340), bus.Read32(0x80006754), bus.Asic.VIDNStart)
 				}
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x802C74E0 && cpu.PC < 0x802C7660 && videoCallbackDispatchHits < 256 {
 					videoCallbackDispatchHits++
@@ -1139,6 +1144,10 @@ func main() {
 				printCodeRange(bus, 0x802207C0, 0x802208D0, "framebuffer direct caller 802208")
 				printCodeRange(bus, 0x80220A40, 0x80220B80, "framebuffer direct caller 80220A")
 				printCodeRange(bus, 0x80220EE0, 0x80221080, "framebuffer direct caller 80220F")
+				printCodeRange(bus, 0x802146E0, 0x802147B0, "framebuffer state writer 802147")
+				printCodeRange(bus, 0x8021C680, 0x8021C720, "framebuffer state reader 8021C6")
+				printCodeRange(bus, 0x8021C9C0, 0x8021CA60, "framebuffer state reader 8021CA")
+				printCodeRange(bus, 0x8021CFD0, 0x8021D070, "framebuffer state reader 8021D0")
 				printCodeRange(bus, 0x80264480, 0x80264640, "post-gate video loop")
 				printCodeRange(bus, 0x802768C0, 0x80276B20, "post-gate video caller")
 			}
