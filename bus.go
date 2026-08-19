@@ -87,6 +87,7 @@ type Bus struct {
 	RIOControlTraceCount     uint32
 	TraceVideoASIC           bool
 	VideoASICTraceCount      uint32
+	VideoTableReadCount      uint32
 	TraceModemTX             bool
 	ModemTXTraceCount        uint32
 	TraceDeviceObject        bool
@@ -290,6 +291,14 @@ func (b *Bus) traceVideoASICWrite(off, width, value uint32) {
 	fmt.Printf("video ASIC write #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X off=0x%04X width=%d val=0x%08X VID_NSTART=0x%08X VIDStat=0x%08X VIDEn=0x%08X BusStat=0x%08X BusEn=0x%08X\n", b.VideoASICTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), off, width, value, b.Asic.VIDNStart, b.Asic.VIDIntStat, b.Asic.VIDIntEnable, b.Asic.BusIntStat, b.Asic.BusIntEnable)
 }
 
+func (b *Bus) traceVideoTableRead(p, width, value uint32) {
+	if !b.TraceVideoASIC || b.VideoTableReadCount >= 128 || b.CPU == nil || p < 0x32FB00 || p >= 0x32FB30 {
+		return
+	}
+	b.VideoTableReadCount++
+	fmt.Printf("video dispatch table read #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X width=%d val=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X a3=0x%08X ra=0x%08X\n", b.VideoTableReadCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), 0x80000000|p, width, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[6]), uint32(b.CPU.Regs[7]), uint32(b.CPU.Regs[31]))
+}
+
 func (b *Bus) traceDeviceObjectRead(rp, value uint32) {
 	if !b.TraceDeviceObject || b.DeviceObjectTraceCount >= 128 || (rp != 0x400 && rp != 0x588) || b.CPU == nil {
 		return
@@ -356,6 +365,7 @@ func (b *Bus) Read8(addr uint32) uint8 {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 1); ok {
 		v := b.RAM[rp]
+		b.traceVideoTableRead(rp, 1, uint32(v))
 		b.traceDevicePage("read", rp, 1, uint32(v))
 		b.traceModemGlobal("read", rp, 1, uint32(v))
 		b.tracePacketQueue("read", rp, 1, uint32(v))
@@ -391,6 +401,7 @@ func (b *Bus) Read16(addr uint32) uint16 {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 2); ok {
 		v := binary.BigEndian.Uint16(b.RAM[rp:])
+		b.traceVideoTableRead(rp, 2, uint32(v))
 		b.traceDevicePage("read", rp, 2, uint32(v))
 		b.traceModemGlobal("read", rp, 2, uint32(v))
 		b.tracePacketQueue("read", rp, 2, uint32(v))
@@ -471,6 +482,7 @@ func (b *Bus) Read32(addr uint32) uint32 {
 	}
 	if rp, ok := ramMirror(p, 4); ok {
 		v := binary.BigEndian.Uint32(b.RAM[rp:])
+		b.traceVideoTableRead(rp, 4, v)
 		b.traceDevicePage("read", rp, 4, v)
 		b.traceDeviceObjectRead(rp, v)
 		b.traceModemGlobal("read", rp, 4, v)
