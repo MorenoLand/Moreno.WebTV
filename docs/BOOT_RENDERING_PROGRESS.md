@@ -26,6 +26,7 @@
 - The primary device-0 pass now models the SOLO-documented modem SRAM/backdoor bank at the normal `0x1e000000` aperture and mirrors accepted `S3` bytes into device-owned storage; the default remains the UART register bank at `0x1e000000..0x1e00001c`.
 - A clean 65M-step run after the bank correction remains at `PC=0x80222E5C`, `ModemStage=4`, `0` modem RX bytes, `0` IDE sector reads, and `VID_NSTART=0x80000000`; the guest did not access device-0 SRAM, and the board-specific reset/backdoor activation is still the missing hardware contract.
 - The opt-in `WEBTV_MODEM_STATUS=0x76610000..0x76610003` probe writes the tested device-object tag to physical `0x588` when stage 4 begins. The high-word-only control passes the tag check but inserts no event; low bit `0x1` selects the selector-1 path, and low bit `0x2` makes the selector-2 enqueue return `2`. None of the four values creates event key `2`, a nonzero `0x80001A3C` receive-queue pointer, an IDE read, or a live framebuffer, so the status field is a separate event-side contract and not the missing packet-queue producer.
+- A documented carrier/compression/connect response followed by a valid PPP LCP Configure-Request also reaches the authentic guest PPP parser (`protocol=0xC021`) but leaves `0x80001A3C` null, with no IDE read or live framebuffer; changing the peer’s result-string spelling is not the missing producer.
 
 ## Current Blocker
 
