@@ -1074,6 +1074,7 @@ func main() {
 				printCodeRange(bus, 0x80229F20, 0x80229FA0, "packet queue dispatch helper")
 			}
 			if os.Getenv("WEBTV_TRACE_WTV_PORT") == "1" {
+				printCodeRange(bus, 0x80229550, 0x80229620, "WebTV port helpers")
 				printCodeRange(bus, 0x80229A80, 0x80229C40, "WebTV port probe")
 			}
 			if os.Getenv("WEBTV_TRACE_MODEM_TX") == "1" {
