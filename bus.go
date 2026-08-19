@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	RAM_SIZE     = 8 * 1024 * 1024
-	RAM_APERTURE = 64 * 1024 * 1024
-	ROM_MAX      = 16 * 1024 * 1024
-	ROM_BASE     = 0x1F000000
-	GLOBAL_MASK  = 0x1FFFFFFF
+	RAM_SIZE      = 8 * 1024 * 1024
+	RAM_APERTURE  = 64 * 1024 * 1024
+	ROM_MAX       = 16 * 1024 * 1024
+	ROM_BASE      = 0x1F000000
+	GLOBAL_MASK   = 0x1FFFFFFF
+	modemSRAMSize = 0x40000
 )
 
 type Bus struct {
@@ -49,6 +50,7 @@ type Bus struct {
 	ModemPPPDecoder          pppDecoder
 	SyntheticPPP             bool
 	TraceModemPPP            bool
+	ModemSRAM                [modemSRAMSize]byte
 	CompatShims              bool
 	ModemIER                 uint8
 	ModemLCR                 uint8
@@ -207,6 +209,19 @@ func (b *Bus) tracePacketQueue(op string, rp, width, value uint32) {
 	fmt.Printf("packet queue %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X phys=0x%08X width=%d val=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", op, b.PacketQueueTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), rp, width, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[16]), uint32(b.CPU.Regs[17]), uint32(b.CPU.Regs[31]))
 }
 
+func modemSRAMOffset(p, width uint32) (uint32, bool) {
+	const base = uint32(0x1E000000)
+	const uartSize = uint32(0x20)
+	if p < base+uartSize {
+		return 0, false
+	}
+	offset := p - base
+	if width == 0 || offset >= modemSRAMSize || width > modemSRAMSize-offset {
+		return 0, false
+	}
+	return offset, true
+}
+
 func (b *Bus) Read8(addr uint32) uint8 {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 1); ok {
@@ -223,6 +238,9 @@ func (b *Bus) Read8(addr uint32) uint8 {
 	}
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		return b.modemRead8(p - 0x1E000000)
+	}
+	if off, ok := modemSRAMOffset(p, 1); ok {
+		return b.ModemSRAM[off]
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
 		off := p & 0xFFFF
@@ -250,6 +268,9 @@ func (b *Bus) Read16(addr uint32) uint16 {
 	}
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		return uint16(b.modemRead8(p - 0x1E000000))
+	}
+	if off, ok := modemSRAMOffset(p, 2); ok {
+		return uint16(b.ModemSRAM[off])
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
 		off := p & 0xFFFF
@@ -287,6 +308,9 @@ func (b *Bus) Read32(addr uint32) uint32 {
 	}
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		return uint32(b.modemRead8(p - 0x1E000000))
+	}
+	if off, ok := modemSRAMOffset(p, 4); ok {
+		return uint32(b.ModemSRAM[off])
 	}
 	if rp, ok := ramMirror(p, 4); ok {
 		v := binary.BigEndian.Uint32(b.RAM[rp:])
@@ -367,6 +391,10 @@ func (b *Bus) Write8(addr, val uint32) {
 		b.modemWrite(p-0x1E000000, val, 1)
 		return
 	}
+	if off, ok := modemSRAMOffset(p, 1); ok {
+		b.ModemSRAM[off] = byte(val)
+		return
+	}
 	b.traceWebTVPort("write", p, 1, val)
 }
 
@@ -411,6 +439,10 @@ func (b *Bus) Write16(addr, val uint32) {
 		b.modemWrite(p-0x1E000000, val, 2)
 		return
 	}
+	if off, ok := modemSRAMOffset(p, 2); ok {
+		b.ModemSRAM[off] = byte(val)
+		return
+	}
 	b.traceWebTVPort("write", p, 2, val)
 }
 
@@ -431,6 +463,10 @@ func (b *Bus) Write32(addr, val uint32) {
 	}
 	if p >= 0x1E000000 && p < 0x1E000020 {
 		b.modemWrite(p-0x1E000000, val, 4)
+		return
+	}
+	if off, ok := modemSRAMOffset(p, 4); ok {
+		b.ModemSRAM[off] = byte(val)
 		return
 	}
 	if rp, ok := ramMirror(p, 4); ok {
@@ -599,6 +635,9 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 					case '3':
 						for i, value := range record.data {
 							b.ModemFirmware[record.address+uint32(i)] = value
+							if record.address+uint32(i) < modemSRAMSize {
+								b.ModemSRAM[record.address+uint32(i)] = value
+							}
 						}
 						b.ModemFirmwareRecords++
 						b.ModemFirmwareBytes += len(record.data)

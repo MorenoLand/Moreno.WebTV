@@ -65,7 +65,10 @@ func TestModemUploadRequiresValidTerminator(t *testing.T) {
 		}
 		bus.modemWrite(0, '\r', 1)
 	}
-	if bus.ModemStage != 3 || !bus.ModemFirmwareReady || len(bus.ModemRX) != 1 {
+	if bus.ModemStage != 3 || !bus.ModemFirmwareReady || len(bus.ModemRX) != 1 || bus.ModemSRAM[0x200] != 0x4C || bus.ModemSRAM[0x213] != 0xFE {
 		t.Fatalf("valid terminator did not complete upload: stage=%d ready=%v rx=%d", bus.ModemStage, bus.ModemFirmwareReady, len(bus.ModemRX))
+	}
+	if bus.Read8(0x1E000200) != 0x4C || bus.Read32(0x1E000200) != 0x4C {
+		t.Fatalf("modem SRAM mapping read8=%02X read32=%08X", bus.Read8(0x1E000200), bus.Read32(0x1E000200))
 	}
 }
