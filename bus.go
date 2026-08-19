@@ -70,13 +70,15 @@ type Bus struct {
 	TraceDeviceObject        bool
 	DeviceObjectTraceCount   uint32
 	DeviceObjectWriteCount   uint32
+	TraceDevicePage          bool
+	DevicePageTraceCount     uint32
 	ModemGlobalTraceCount    uint32
 	TracePacketQueue         bool
 	PacketQueueTraceCount    uint32
 }
 
 func NewBus() *Bus {
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -172,6 +174,14 @@ func (b *Bus) traceDeviceObjectWrite(rp, width, value uint32) {
 	fmt.Printf("device object write #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X phys=0x%08X width=%d val=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", b.DeviceObjectWriteCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), rp, width, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[16]), uint32(b.CPU.Regs[17]), uint32(b.CPU.Regs[31]))
 }
 
+func (b *Bus) traceDevicePage(op string, rp, width, value uint32) {
+	if !b.TraceDevicePage || b.DevicePageTraceCount >= 16384 || rp >= 0x590 || rp+width <= 0x400 || b.CPU == nil {
+		return
+	}
+	b.DevicePageTraceCount++
+	fmt.Printf("device page %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X phys=0x%08X width=%d val=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", op, b.DevicePageTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), rp, width, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[16]), uint32(b.CPU.Regs[17]), uint32(b.CPU.Regs[31]))
+}
+
 func (b *Bus) traceModemGlobal(op string, rp, width, value uint32) {
 	if !b.TraceDeviceObject || b.ModemGlobalTraceCount >= 128 || rp >= 0x1CFC || rp+width <= 0x1CF8 || b.CPU == nil {
 		return
@@ -192,6 +202,7 @@ func (b *Bus) Read8(addr uint32) uint8 {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 1); ok {
 		v := b.RAM[rp]
+		b.traceDevicePage("read", rp, 1, uint32(v))
 		b.traceModemGlobal("read", rp, 1, uint32(v))
 		b.tracePacketQueue("read", rp, 1, uint32(v))
 		return v
@@ -218,6 +229,7 @@ func (b *Bus) Read16(addr uint32) uint16 {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 2); ok {
 		v := binary.BigEndian.Uint16(b.RAM[rp:])
+		b.traceDevicePage("read", rp, 2, uint32(v))
 		b.traceModemGlobal("read", rp, 2, uint32(v))
 		b.tracePacketQueue("read", rp, 2, uint32(v))
 		return v
@@ -269,6 +281,7 @@ func (b *Bus) Read32(addr uint32) uint32 {
 	}
 	if rp, ok := ramMirror(p, 4); ok {
 		v := binary.BigEndian.Uint32(b.RAM[rp:])
+		b.traceDevicePage("read", rp, 4, v)
 		b.traceDeviceObjectRead(rp, v)
 		b.traceModemGlobal("read", rp, 4, v)
 		b.tracePacketQueue("read", rp, 4, v)
@@ -316,6 +329,7 @@ func (b *Bus) Write8(addr, val uint32) {
 		fmt.Printf("factory-global write8 step=%d pc=0x%08X inst=0x%08X val=0x%02X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), val&0xFF)
 	}
 	if rp, ok := ramMirror(p, 1); ok {
+		b.traceDevicePage("write", rp, 1, val&0xFF)
 		b.traceDeviceObjectWrite(rp, 1, val&0xFF)
 		b.traceModemGlobal("write", rp, 1, val&0xFF)
 		b.tracePacketQueue("write", rp, 1, val&0xFF)
@@ -359,6 +373,7 @@ func (b *Bus) Write16(addr, val uint32) {
 		fmt.Printf("factory-global write16 step=%d pc=0x%08X inst=0x%08X addr=0x%08X val=0x%04X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), p, val&0xFFFF)
 	}
 	if rp, ok := ramMirror(p, 2); ok {
+		b.traceDevicePage("write", rp, 2, val&0xFFFF)
 		b.traceDeviceObjectWrite(rp, 2, val&0xFFFF)
 		b.traceModemGlobal("write", rp, 2, val&0xFFFF)
 		b.tracePacketQueue("write", rp, 2, val&0xFFFF)
@@ -410,6 +425,7 @@ func (b *Bus) Write32(addr, val uint32) {
 		return
 	}
 	if rp, ok := ramMirror(p, 4); ok {
+		b.traceDevicePage("write", rp, 4, val)
 		b.traceDeviceObjectWrite(rp, 4, val)
 		b.traceModemGlobal("write", rp, 4, val)
 		b.tracePacketQueue("write", rp, 4, val)
