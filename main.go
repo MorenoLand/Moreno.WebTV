@@ -960,6 +960,9 @@ func main() {
 				binary.BigEndian.Uint32(bus.RAM[0x80A88:]), binary.BigEndian.Uint32(bus.RAM[0x80A8C:]), binary.BigEndian.Uint32(bus.RAM[0x80A90:]), binary.BigEndian.Uint32(bus.RAM[0x80A94:]), binary.BigEndian.Uint32(bus.RAM[0x80A98:]))
 			fmt.Printf("Final eventq 1E70=%08X 1E74=%08X ACB8=%08X ACC0=%08X ACC4=%08X\n",
 				binary.BigEndian.Uint32(bus.RAM[0x1E70:]), binary.BigEndian.Uint32(bus.RAM[0x1E74:]), binary.BigEndian.Uint32(bus.RAM[0xACB8:]), binary.BigEndian.Uint32(bus.RAM[0xACC0:]), binary.BigEndian.Uint32(bus.RAM[0xACC4:]))
+			if bus.TraceDeviceObject {
+				fmt.Printf("Final modem globals 1CF0=%08X 1CF4=%08X 1CF8=%08X 220C=%08X\n", binary.BigEndian.Uint32(bus.RAM[0x1CF0:]), binary.BigEndian.Uint32(bus.RAM[0x1CF4:]), binary.BigEndian.Uint32(bus.RAM[0x1CF8:]), binary.BigEndian.Uint32(bus.RAM[0x220C:]))
+			}
 			printListChain(bus, 0x8007E930, "Final gate list", 8)
 			eventTable := binary.BigEndian.Uint32(bus.RAM[0x25D4:]) & 0x1FFFFFFF
 			if eventTable+0x60 < uint32(len(bus.RAM)) {
@@ -1061,6 +1064,8 @@ func main() {
 				printJALRefs(bus, 0x802C5D00, 16)
 				printJALRefs(bus, 0x802C5DC4, 16)
 				printJALRefs(bus, 0x802C60DC, 16)
+				printAccessImmRefs(bus, 0x1CF8, 64)
+				printStoreImmRefs(bus, 0x1CF8, 64)
 				printCodeRange(bus, 0x802C5B00, 0x802C5C80, "modem object callers")
 				printCodeRange(bus, 0x802C5D00, 0x802C5E80, "modem event object setup")
 				printCodeRange(bus, 0x802C5F80, 0x802C60C0, "modem time helper")
