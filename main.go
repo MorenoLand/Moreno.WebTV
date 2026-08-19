@@ -173,6 +173,7 @@ func main() {
 			framebufferCallerHits := 0
 			framebufferDirectCallerHits := 0
 			framebufferStateHits := 0
+			displayCallerHits := 0
 			lastResolverKey := ""
 			bus.Tracking = os.Getenv("WEBTV_TRACE_BUS") == "1"
 			compatShims := os.Getenv("WEBTV_COMPAT_SHIMS") == "1"
@@ -202,6 +203,10 @@ func main() {
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && framebufferStateHits < 256 && ((cpu.PC >= 0x80214740 && cpu.PC < 0x802147B0) || (cpu.PC >= 0x8021C6C0 && cpu.PC < 0x8021C720) || (cpu.PC >= 0x8021C9F0 && cpu.PC < 0x8021CA60) || (cpu.PC >= 0x8021D000 && cpu.PC < 0x8021D070) || (cpu.PC >= 0x80220870 && cpu.PC < 0x802208C0) || (cpu.PC >= 0x80220A80 && cpu.PC < 0x80220B30)) {
 					framebufferStateHits++
 					fmt.Printf("framebuffer state #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X state1710=0x%08X state1718=0x%08X state1930=0x%08X state6340=0x%08X state6754=0x%08X VID_NSTART=0x%08X\n", framebufferStateHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], bus.Read32(0x80001710), bus.Read32(0x80001718), bus.Read32(0x80001930), bus.Read32(0x80006340), bus.Read32(0x80006754), bus.Asic.VIDNStart)
+				}
+				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && displayCallerHits < 256 && ((cpu.PC >= 0x80215680 && cpu.PC < 0x80215790) || (cpu.PC >= 0x80215980 && cpu.PC < 0x80215AA0) || (cpu.PC >= 0x80221080 && cpu.PC < 0x80221180)) {
+					displayCallerHits++
+					fmt.Printf("display caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X state1710=0x%08X state1714=0x%08X state1718=0x%08X state1930=0x%08X state6754=0x%08X VID_NSTART=0x%08X\n", displayCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], bus.Read32(0x80001710), bus.Read32(0x80001714), bus.Read32(0x80001718), bus.Read32(0x80001930), bus.Read32(0x80006754), bus.Asic.VIDNStart)
 				}
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x802C74E0 && cpu.PC < 0x802C7660 && videoCallbackDispatchHits < 256 {
 					videoCallbackDispatchHits++
@@ -1148,6 +1153,8 @@ func main() {
 				printCodeRange(bus, 0x8021C680, 0x8021C720, "framebuffer state reader 8021C6")
 				printCodeRange(bus, 0x8021C9C0, 0x8021CA60, "framebuffer state reader 8021CA")
 				printCodeRange(bus, 0x8021CFD0, 0x8021D070, "framebuffer state reader 8021D0")
+				printCodeRange(bus, 0x80215580, 0x80215B00, "display callers 80215")
+				printCodeRange(bus, 0x80221080, 0x802211A0, "display callers 802210")
 				printJALRefs(bus, 0x802146F8, 64)
 				printJALRefs(bus, 0x8021C680, 64)
 				printJALRefs(bus, 0x8021C9C0, 64)
