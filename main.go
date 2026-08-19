@@ -153,6 +153,7 @@ func main() {
 			kseg2AllocDumped := false
 			modemLoopHits := 0
 			modemCoreHits := 0
+			rxHandlerHits := 0
 			modemCodeDumped := false
 			eventPushCallerHits := 0
 			eventPushFuncHits := 0
@@ -908,6 +909,11 @@ func main() {
 				beforeS4 := cpu.Regs[20]
 				beforePC := cpu.PC
 				beforeInst := recent[step%len(recent)].inst
+				if traceModemWindow && beforePC >= 0x80221780 && beforePC < 0x80221820 && rxHandlerHits < 256 {
+					rxHandlerHits++
+					fmt.Printf("modem rx handler %03d step=%d PC=0x%08X inst=0x%08X v0=0x%08X v1=0x%08X a0=0x%08X a1=0x%08X a2=0x%08X a3=0x%08X t0=0x%08X t1=0x%08X s0=0x%08X s1=0x%08X s2=0x%08X s3=0x%08X sp=0x%08X ra=0x%08X rx=%d nextRX=0x%016X g1900=0x%08X g1990=0x%08X g1994=0x%08X g1998=0x%08X g199C=0x%08X g1C90=0x%08X g1C94=0x%08X g1C98=0x%08X g1C9C=0x%08X q1A3C=0x%08X q1A40=0x%08X q1A44=0x%08X q1A48=0x%08X\n",
+						rxHandlerHits, step, beforePC, beforeInst, uint32(cpu.Regs[2]), uint32(cpu.Regs[3]), uint32(cpu.Regs[4]), uint32(cpu.Regs[5]), uint32(cpu.Regs[6]), uint32(cpu.Regs[7]), uint32(cpu.Regs[8]), uint32(cpu.Regs[9]), uint32(cpu.Regs[16]), uint32(cpu.Regs[17]), uint32(cpu.Regs[18]), uint32(cpu.Regs[19]), uint32(cpu.Regs[29]), uint32(cpu.Regs[31]), len(bus.ModemRX), bus.ModemNextRXAt, binary.BigEndian.Uint32(bus.RAM[0x1900:]), binary.BigEndian.Uint32(bus.RAM[0x1990:]), binary.BigEndian.Uint32(bus.RAM[0x1994:]), binary.BigEndian.Uint32(bus.RAM[0x1998:]), binary.BigEndian.Uint32(bus.RAM[0x199C:]), binary.BigEndian.Uint32(bus.RAM[0x1C90:]), binary.BigEndian.Uint32(bus.RAM[0x1C94:]), binary.BigEndian.Uint32(bus.RAM[0x1C98:]), binary.BigEndian.Uint32(bus.RAM[0x1C9C:]), binary.BigEndian.Uint32(bus.RAM[0x1A3C:]), binary.BigEndian.Uint32(bus.RAM[0x1A40:]), binary.BigEndian.Uint32(bus.RAM[0x1A44:]), binary.BigEndian.Uint32(bus.RAM[0x1A48:]))
+				}
 				if traceModemWindow && ((step >= 57862750 && step < 57862950) || (step >= 57877350 && step < 57878000)) {
 					fmt.Printf("modem window step=%d PC=0x%08X inst=0x%08X a0=0x%08X v0=0x%08X rx=%d ier=0x%02X msr=0x%02X rioStat=0x%08X rioEn=0x%08X busStat=0x%08X busEn=0x%08X vidStat=0x%08X vidEn=0x%08X cause=0x%08X status=0x%08X\n", step, cpu.PC, beforeInst, uint32(cpu.Regs[4]), uint32(cpu.Regs[2]), len(bus.ModemRX), bus.ModemIER, bus.ModemMSR, bus.Asic.RIOIntStat, bus.Asic.RIOIntEnable, bus.Asic.BusIntStat, bus.Asic.BusIntEnable, bus.Asic.VIDIntStat, bus.Asic.VIDIntEnable, cpu.COP0[Cause], cpu.COP0[Status])
 				}
