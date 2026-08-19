@@ -48,6 +48,10 @@ type SoloASIC struct {
 
 	ROMCntl0 uint32
 	ROMCntl1 uint32
+	DevCntl0 uint32
+	DevCntl1 uint32
+	WTVCntl  uint32
+	RIOCntl  uint32
 
 	LEDState uint32
 	IRCntl   uint32
@@ -118,6 +122,8 @@ func NewSoloASIC() *SoloASIC {
 		ChipID:             0x03120000,
 		SysConfig:          0x003f8700,
 		VIDNStart:          0x80000000,
+		WTVCntl:            0x00000001,
+		RIOCntl:            0x0000000E,
 		MemTiming:          0xADBADFFA,
 		MemCntl:            0x03,
 		MemRefCnt:          0x0400,
@@ -231,6 +237,14 @@ func (a *SoloASIC) Read(off uint32) uint32 {
 		return a.ROMCntl0
 	case 0x1008:
 		return a.ROMCntl1
+	case 0x100C:
+		return a.DevCntl0
+	case 0x1010:
+		return a.DevCntl1
+	case 0x101C:
+		return a.WTVCntl
+	case 0x1020:
+		return a.RIOCntl
 	case 0x4000:
 		return 0
 	case 0x4004:
@@ -453,6 +467,14 @@ func (a *SoloASIC) Write(off, data uint32) {
 		a.ROMCntl0 = data
 	case 0x1008:
 		a.ROMCntl1 = data
+	case 0x100C:
+		a.DevCntl0 = data & 0x03FFFFFF
+	case 0x1010:
+		a.DevCntl1 = data & 0x03FFFFFF
+	case 0x101C:
+		a.WTVCntl = data & 0xFF
+	case 0x1020:
+		a.RIOCntl = data & 0x0F
 	case 0x4004:
 		a.LEDState = data
 	case 0x4008:

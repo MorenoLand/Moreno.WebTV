@@ -20,6 +20,8 @@
 - A clean `WEBTV_STEPS=65000000 WEBTV_VIDEO=0 WEBTV_COMPAT_SHIMS=0 WEBTV_SYNTH_CLOCK=0 WEBTV_SYNTHETIC_PPP=0` run reaches `PC=0x80222E5C`, `Status=0x3400C401`, `ModemStage=4`, `294` modem reads, `128` modem writes, `0` received bytes, `0` IDE sector reads, and `VID_NSTART=0x80000000`.
 - A full `650000000`-step run with those same flags reaches `PC=0x8022A448`, keeps gate byte `0x8000224E` at `0`, leaves only sentinel event key `0xFF`, and still performs `0` IDE sector reads.
 - The old host-side connecting/road fallback is not part of the current viewer. SDL presents the ROM-backed splash and switches only to a stable guest YUY2 frame.
+- The 2026-08-19 RIO pass models the documented `DEV_CNTL0/1`, `WTV_CNTL`, and `RIO_CNTL` latches, masks, and reset values from the SOLO1 ASIC specification.
+- A clean 65M-step run after that change is unchanged at `PC=0x80222E5C`, `VID_NSTART=0x80000000`, `0` IDE sector reads, and `0` modem RX bytes; the real guest loading screen remains blocked on external post-carrier ingress.
 
 ## Current Blocker
 

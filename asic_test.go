@@ -22,6 +22,38 @@ func TestRIOPollStatusWaitsAfterAck(t *testing.T) {
 	}
 }
 
+func TestRIOControlRegistersFollowSoloSpec(t *testing.T) {
+	asic := NewSoloASIC()
+	if got := asic.Read(0x101C); got != 0x01 {
+		t.Fatalf("default WTV_CNTL=0x%08X, want 0x01", got)
+	}
+	if got := asic.Read(0x1020); got != 0x0E {
+		t.Fatalf("default RIO_CNTL=0x%08X, want 0x0E", got)
+	}
+	asic.Write(0x100C, 0xFFFFFFFF)
+	asic.Write(0x1010, 0xFFFFFFFF)
+	asic.Write(0x101C, 0xFFFFFFFF)
+	asic.Write(0x1020, 0xFFFFFFFF)
+	if got := asic.Read(0x100C); got != 0x03FFFFFF {
+		t.Fatalf("DEV_CNTL0=0x%08X, want 0x03FFFFFF", got)
+	}
+	if got := asic.Read(0x1010); got != 0x03FFFFFF {
+		t.Fatalf("DEV_CNTL1=0x%08X, want 0x03FFFFFF", got)
+	}
+	if got := asic.Read(0x101C); got != 0xFF {
+		t.Fatalf("WTV_CNTL=0x%08X, want 0xFF", got)
+	}
+	if got := asic.Read(0x1020); got != 0x0F {
+		t.Fatalf("RIO_CNTL=0x%08X, want 0x0F", got)
+	}
+	if asic.UnmodeledReadHits[0x100C] != 0 || asic.UnmodeledReadHits[0x1010] != 0 || asic.UnmodeledReadHits[0x101C] != 0 || asic.UnmodeledReadHits[0x1020] != 0 {
+		t.Fatalf("RIO control reads remained unmodeled: %+v", asic.UnmodeledReadHits)
+	}
+	if asic.UnmodeledWriteHits[0x100C] != 0 || asic.UnmodeledWriteHits[0x1010] != 0 || asic.UnmodeledWriteHits[0x101C] != 0 || asic.UnmodeledWriteHits[0x1020] != 0 {
+		t.Fatalf("RIO control writes remained unmodeled: %+v", asic.UnmodeledWriteHits)
+	}
+}
+
 func TestPendingIP2RequiresEnabledInterruptSource(t *testing.T) {
 	asic := NewSoloASIC()
 
