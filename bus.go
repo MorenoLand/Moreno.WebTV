@@ -312,11 +312,21 @@ func (b *Bus) traceModemGlobal(op string, rp, width, value uint32) {
 }
 
 func (b *Bus) tracePacketQueue(op string, rp, width, value uint32) {
-	if !b.TracePacketQueue || b.PacketQueueTraceCount >= 128 || rp >= 0x1A4C || rp+width <= 0x1A3C || b.CPU == nil {
+	global := rp < 0x1A4C && rp+width > 0x1A3C
+	nodeBase := uint32(0)
+	if b.ProbeModemQueue && b.ModemQueueProbePtr != 0 {
+		nodeBase = b.phys(b.ModemQueueProbePtr)
+	}
+	node := b.TracePacketQueue && b.ProbeModemQueue && nodeBase != 0 && rp >= nodeBase && rp+width <= nodeBase+0x40
+	if !b.TracePacketQueue || b.PacketQueueTraceCount >= 512 || (!global && !node) || b.CPU == nil {
 		return
 	}
 	b.PacketQueueTraceCount++
-	fmt.Printf("packet queue %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X phys=0x%08X width=%d val=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", op, b.PacketQueueTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), rp, width, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[16]), uint32(b.CPU.Regs[17]), uint32(b.CPU.Regs[31]))
+	name := "packet queue"
+	if node {
+		name = "packet queue node"
+	}
+	fmt.Printf("%s %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X phys=0x%08X width=%d val=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", name, op, b.PacketQueueTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), rp, width, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[16]), uint32(b.CPU.Regs[17]), uint32(b.CPU.Regs[31]))
 }
 
 func modemSRAMOffset(p, width uint32) (uint32, bool) {
