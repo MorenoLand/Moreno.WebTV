@@ -162,12 +162,14 @@ func ramMirror(p uint32, width uint32) (uint32, bool) {
 
 const webTVPortProbeAddress uint32 = 0x04FFFFF3
 const webTVPortProbeWordAddress uint32 = 0x04FFFFF0
+const webTVPortSecondaryProbeAddress uint32 = 0x057FFFF3
+const webTVPortSecondaryProbeWordAddress uint32 = 0x057FFFF0
 const webTVPortBase uint32 = 0x04F00000
 const webTVPortSize uint32 = 0x18
 const modemCharCycles uint64 = 14500
 
 func (b *Bus) traceWebTVPort(op string, p, width, value uint32) {
-	if !b.TraceWebTVPort || b.WebTVPortTraceCount >= 128 || !((p >= webTVPortBase && p < webTVPortBase+webTVPortSize && width <= webTVPortBase+webTVPortSize-p) || (p >= webTVPortProbeWordAddress && p < webTVPortProbeWordAddress+4 && width <= webTVPortProbeWordAddress+4-p)) || b.CPU == nil {
+	if !b.TraceWebTVPort || b.WebTVPortTraceCount >= 128 || !((p >= webTVPortBase && p < webTVPortBase+webTVPortSize && width <= webTVPortBase+webTVPortSize-p) || (p >= webTVPortProbeWordAddress && p < webTVPortProbeWordAddress+4 && width <= webTVPortProbeWordAddress+4-p) || (p >= webTVPortSecondaryProbeWordAddress && p < webTVPortSecondaryProbeWordAddress+4 && width <= webTVPortSecondaryProbeWordAddress+4-p)) || b.CPU == nil {
 		return
 	}
 	b.WebTVPortTraceCount++
@@ -196,6 +198,13 @@ func webTVPortResponse(p, width uint32) (uint32, bool) {
 		}
 		if p == webTVPortProbeWordAddress && width == 4 {
 			return 2, true
+		}
+	case "secondary-type2":
+		if p == webTVPortSecondaryProbeAddress && width == 1 {
+			return 2, true
+		}
+		if p == webTVPortSecondaryProbeWordAddress && width == 4 {
+			return 0xFFFFFFFF, true
 		}
 	}
 	return 0, false
