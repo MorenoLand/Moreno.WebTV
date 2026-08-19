@@ -29,6 +29,8 @@ type Bus struct {
 	RIOWriteCnt              uint64
 	ModemReadCnt             uint64
 	ModemWriteCnt            uint64
+	ModemPostCarrierWrites   uint64
+	ModemPostCarrierTXBytes  uint64
 	ModemRX                  []byte
 	ModemTXLine              []byte
 	ModemStage               int
@@ -63,6 +65,8 @@ type Bus struct {
 	WebTVPortTraceCount      uint32
 	TraceRIOControl          bool
 	RIOControlTraceCount     uint32
+	TraceModemTX             bool
+	ModemTXTraceCount        uint32
 	TraceDeviceObject        bool
 	DeviceObjectTraceCount   uint32
 	TracePacketQueue         bool
@@ -70,7 +74,7 @@ type Bus struct {
 }
 
 func NewBus() *Bus {
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -487,6 +491,12 @@ func (b *Bus) modemRead8(off uint32) uint8 {
 
 func (b *Bus) modemWrite(off, val, width uint32) {
 	b.ModemWriteCnt++
+	if b.ModemStage >= 4 {
+		b.ModemPostCarrierWrites++
+		if b.TraceModemTX && b.ModemPostCarrierWrites <= 64 && b.CPU != nil {
+			fmt.Printf("modem post-carrier write #%d step=%d PC=0x%08X execPC=0x%08X off=0x%02X width=%d val=0x%X\n", b.ModemPostCarrierWrites, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, off, width, val)
+		}
+	}
 	if b.CPU != nil && (b.ModemWriteCnt <= 128 || b.ModemWriteCnt%1000000 == 0) {
 		fmt.Printf("modem write #%d step=%d PC=0x%08X execPC=0x%08X off=0x%02X width=%d val=0x%X\n", b.ModemWriteCnt, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, off, width, val)
 	}
@@ -498,6 +508,11 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 		}
 		ch := byte(val)
 		if b.ModemStage >= 4 {
+			b.ModemPostCarrierTXBytes++
+			if b.TraceModemTX && b.ModemTXTraceCount < 64 && b.CPU != nil {
+				b.ModemTXTraceCount++
+				fmt.Printf("modem post-carrier tx #%d step=%d PC=0x%08X execPC=0x%08X val=0x%02X\n", b.ModemTXTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, ch)
+			}
 			if b.ModemLink != nil {
 				b.ModemLink.send([]byte{ch})
 			}

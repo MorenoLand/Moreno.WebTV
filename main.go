@@ -1041,6 +1041,11 @@ func main() {
 			if os.Getenv("WEBTV_TRACE_WTV_PORT") == "1" {
 				printCodeRange(bus, 0x80229A80, 0x80229C40, "WebTV port probe")
 			}
+			if os.Getenv("WEBTV_TRACE_MODEM_TX") == "1" {
+				printJALRefs(bus, 0x8024CB50, 16)
+				printCodeRange(bus, 0x8024CB40, 0x8024CC20, "modem blastdata")
+				printCodeRange(bus, 0x8020C2A0, 0x8020C3F0, "modem UART helpers")
+			}
 			if bus.TraceDeviceField {
 				printCodeRange(bus, 0x802E6100, 0x802E6270, "resource resolver")
 				printCodeRange(bus, 0x802E8C80, 0x802E8DE0, "factory global initializer")
@@ -1146,6 +1151,7 @@ func main() {
 		fmt.Printf("IDE sector reads: %d\n", bus.IDE.ReadCount)
 	}
 	fmt.Printf("Modem stage=%d reads=%d writes=%d rx=%d wire=%d ier=0x%02X lcr=0x%02X mcr=0x%02X msr=0x%02X nextRX=0x%016X rioStat=0x%08X rioEn=0x%08X\n", bus.ModemStage, bus.ModemReadCnt, bus.ModemWriteCnt, len(bus.ModemRX), len(bus.ModemWireRX), bus.ModemIER, bus.ModemLCR, bus.ModemMCR, bus.ModemMSR, bus.ModemNextRXAt, bus.Asic.RIOIntStat, bus.Asic.RIOIntEnable)
+	fmt.Printf("Modem post-carrier writes=%d txBytes=%d\n", bus.ModemPostCarrierWrites, bus.ModemPostCarrierTXBytes)
 	fmt.Printf("ASIC final IRQ BusStat=0x%08X BusEn=0x%08X TimStat=0x%08X TimEn=0x%08X TimerCompare=0x%08X SysTimerNext=0x%016X Cycles=0x%016X\n", bus.Asic.BusIntStat, bus.Asic.BusIntEnable, bus.Asic.TimIntStat, bus.Asic.TimIntEnable, bus.Asic.TimerCompare, bus.Asic.SysTimerNext, bus.Asic.Cycles)
 	fmt.Printf("Written ASIC registers:\n")
 	offs := make([]uint32, 0, len(bus.Asic.WriteLog))
