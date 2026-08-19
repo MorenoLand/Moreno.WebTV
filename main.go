@@ -1077,6 +1077,10 @@ func main() {
 				printCodeRange(bus, 0x80229550, 0x80229620, "WebTV port helpers")
 				printCodeRange(bus, 0x80229A80, 0x80229C40, "WebTV port probe")
 			}
+			if os.Getenv("WEBTV_TRACE_VIDEO") == "1" {
+				printCodeRange(bus, 0x80264480, 0x80264640, "post-gate video loop")
+				printCodeRange(bus, 0x802768C0, 0x80276B20, "post-gate video caller")
+			}
 			if os.Getenv("WEBTV_TRACE_MODEM_TX") == "1" {
 				printJALRefs(bus, 0x8024CB50, 16)
 				printCodeRange(bus, 0x8024CB40, 0x8024CC20, "modem blastdata")
