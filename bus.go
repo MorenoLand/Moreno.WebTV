@@ -94,12 +94,17 @@ type Bus struct {
 	ModemGlobalTraceCount    uint32
 	TracePacketQueue         bool
 	PacketQueueTraceCount    uint32
+	ProbeModemQueue          bool
+	ModemQueueProbePtr       uint32
+	ModemQueueProbeMask      uint32
+	ModemQueueProbeSeeded    bool
 }
 
 func NewBus() *Bus {
 	modemDeviceStatus, forceModemDeviceStatus := modemDeviceStatusFromEnv()
 	modemDeviceField18C, modemDeviceField190, persistModemDeviceFields := modemDeviceFieldsFromEnv()
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ForceModemDeviceStatus: forceModemDeviceStatus, PersistModemDeviceStatus: os.Getenv("WEBTV_PERSIST_MODEM_STATUS") == "1", ModemDeviceStatus: modemDeviceStatus, PersistModemDeviceFields: persistModemDeviceFields, ModemDeviceField18C: modemDeviceField18C, ModemDeviceField190: modemDeviceField190, ModemFirmware: make(map[uint32]byte)}
+	modemQueueProbePtr, modemQueueProbeMask, probeModemQueue := modemQueueProbeFromEnv()
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ForceModemDeviceStatus: forceModemDeviceStatus, PersistModemDeviceStatus: os.Getenv("WEBTV_PERSIST_MODEM_STATUS") == "1", ModemDeviceStatus: modemDeviceStatus, PersistModemDeviceFields: persistModemDeviceFields, ModemDeviceField18C: modemDeviceField18C, ModemDeviceField190: modemDeviceField190, ProbeModemQueue: probeModemQueue, ModemQueueProbePtr: modemQueueProbePtr, ModemQueueProbeMask: modemQueueProbeMask, ModemFirmware: make(map[uint32]byte)}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -132,6 +137,21 @@ func modemDeviceFieldsFromEnv() (uint32, uint32, bool) {
 	field18C, ok18C := parse(parts[0])
 	field190, ok190 := parse(parts[1])
 	return field18C, field190, ok18C && ok190
+}
+
+func modemQueueProbeFromEnv() (uint32, uint32, bool) {
+	parts := strings.Split(os.Getenv("WEBTV_MODEM_QUEUE_PROBE"), ",")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	parse := func(value string) (uint32, bool) {
+		value = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(value), "0x"), "0X")
+		parsed, err := strconv.ParseUint(value, 16, 32)
+		return uint32(parsed), err == nil
+	}
+	ptr, okPtr := parse(parts[0])
+	mask, okMask := parse(parts[1])
+	return ptr, mask, okPtr && okMask && ptr != 0 && mask != 0
 }
 
 func (b *Bus) LoadBootROM(bank0, bank1 []byte) {
@@ -866,6 +886,7 @@ func (b *Bus) queueModemWireRX(data []byte) {
 		b.ModemPPPFrames++
 		b.ModemLastPPPProtocol = packet.Protocol
 		b.ModemLastPPPInfo = append(b.ModemLastPPPInfo[:0], packet.Information...)
+		b.seedModemQueueProbe()
 		if b.TraceModemPPP && b.CPU != nil {
 			fmt.Printf("modem PPP RX frame #%d step=%d protocol=0x%04X infoBytes=%d\n", b.ModemPPPFrames, b.CPU.Steps, packet.Protocol, len(packet.Information))
 		}
@@ -875,6 +896,21 @@ func (b *Bus) queueModemWireRX(data []byte) {
 		b.ModemNextRXAt = b.Asic.Cycles + modemCharCycles
 	}
 	b.releaseModemRX()
+}
+
+func (b *Bus) seedModemQueueProbe() {
+	if !b.ProbeModemQueue || b.ModemQueueProbeSeeded {
+		return
+	}
+	b.ModemQueueProbeSeeded = true
+	ptr := b.ModemQueueProbePtr
+	mask := b.ModemQueueProbeMask
+	b.Write32(ptr+0x0C, 0x00000010)
+	b.Write32(ptr+0x14, 0)
+	b.Write32(ptr+0x18, mask)
+	b.Write32(0x80001A3C, ptr)
+	b.Write32(0x80001A40, mask)
+	fmt.Printf("modem queue probe seeded ptr=0x%08X mask=0x%08X\n", ptr, mask)
 }
 
 func (b *Bus) releaseModemRX() {
