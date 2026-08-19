@@ -35,6 +35,10 @@ type Bus struct {
 	ModemTXLine              []byte
 	ModemStage               int
 	ModemStageAt             uint64
+	ModemFirmware            map[uint32]byte
+	ModemFirmwareRecords     int
+	ModemFirmwareBytes       int
+	ModemFirmwareReady       bool
 	ModemPPPBytes            int
 	ModemLCPQueued           bool
 	ModemWireRX              []byte
@@ -78,7 +82,7 @@ type Bus struct {
 }
 
 func NewBus() *Bus {
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ModemFirmware: make(map[uint32]byte)}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -574,17 +578,35 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 		if ch == '\r' || ch == '\n' {
 			line := string(b.ModemTXLine)
 			if b.ModemStage == 0 && strings.Contains(line, "AT**") {
+				b.ModemFirmware = make(map[uint32]byte)
+				b.ModemFirmwareRecords = 0
+				b.ModemFirmwareBytes = 0
+				b.ModemFirmwareReady = false
 				b.queueModemRX([]byte("\n\nDownload Modem Firmware .."))
 				b.ModemStage = 1
 				if b.CPU != nil {
 					fmt.Printf("modem stage 1 queued step=%d writes=%d line=%q\n", b.CPU.Steps, b.ModemWriteCnt, line)
 				}
 			}
-			if b.ModemStage >= 1 && b.ModemStage < 3 && strings.HasPrefix(line, "S705") {
-				b.queueModemRX([]byte("."))
-				b.ModemStage = 3
-				if b.CPU != nil {
-					fmt.Printf("modem stage 2 queued step=%d writes=%d line=%q\n", b.CPU.Steps, b.ModemWriteCnt, line)
+			if b.ModemStage >= 1 && b.ModemStage < 3 && strings.HasPrefix(line, "S") {
+				if record, err := parseModemSRecord([]byte(line)); err == nil {
+					switch record.kind {
+					case '3':
+						for i, value := range record.data {
+							b.ModemFirmware[record.address+uint32(i)] = value
+						}
+						b.ModemFirmwareRecords++
+						b.ModemFirmwareBytes += len(record.data)
+					case '7':
+						if b.ModemFirmwareRecords != 0 && b.ModemFirmwareBytes != 0 {
+							b.ModemFirmwareReady = true
+							b.queueModemRX([]byte("."))
+							b.ModemStage = 3
+							if b.CPU != nil {
+								fmt.Printf("modem stage 2 queued step=%d writes=%d line=%q records=%d bytes=%d\n", b.CPU.Steps, b.ModemWriteCnt, line, b.ModemFirmwareRecords, b.ModemFirmwareBytes)
+							}
+						}
+					}
 				}
 			}
 			b.ModemTXLine = b.ModemTXLine[:0]

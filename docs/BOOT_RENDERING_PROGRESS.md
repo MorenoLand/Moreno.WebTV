@@ -22,6 +22,7 @@
 - The old host-side connecting/road fallback is not part of the current viewer. SDL presents the ROM-backed splash and switches only to a stable guest YUY2 frame.
 - The 2026-08-19 RIO pass models the documented `DEV_CNTL0/1`, `WTV_CNTL`, and `RIO_CNTL` latches, masks, and reset values from the SOLO1 ASIC specification.
 - A clean 65M-step run after that change is unchanged at `PC=0x80222E5C`, `VID_NSTART=0x80000000`, `0` IDE sector reads, and `0` modem RX bytes; the real guest loading screen remains blocked on external post-carrier ingress.
+- The modem pass now validates and stores the supplied S-record upload before accepting `S70500000000FA`: the image contains three `S3` records, `21` data bytes at modem addresses `0x200..0x215`, and a checksum-valid `S7` terminator. The clean 65M run still reaches `ModemStage=4` with `128` writes, `2` post-carrier data bytes, `0` modem RX bytes, and `VID_NSTART=0x80000000`, so the remaining blocker is downstream shared receive-queue/event ingress rather than upload parsing.
 
 ## Current Blocker
 
