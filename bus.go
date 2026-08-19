@@ -63,10 +63,12 @@ type Bus struct {
 	WebTVPortTraceCount      uint32
 	TraceDeviceObject        bool
 	DeviceObjectTraceCount   uint32
+	TracePacketQueue         bool
+	PacketQueueTraceCount    uint32
 }
 
 func NewBus() *Bus {
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1"}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -141,10 +143,20 @@ func (b *Bus) traceDeviceObjectRead(rp, value uint32) {
 	fmt.Printf("device object read #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X phys=0x%08X val=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", b.DeviceObjectTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), rp, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[16]), uint32(b.CPU.Regs[17]), uint32(b.CPU.Regs[31]))
 }
 
+func (b *Bus) tracePacketQueue(op string, rp, width, value uint32) {
+	if !b.TracePacketQueue || b.PacketQueueTraceCount >= 128 || rp >= 0x1A4C || rp+width <= 0x1A3C || b.CPU == nil {
+		return
+	}
+	b.PacketQueueTraceCount++
+	fmt.Printf("packet queue %s #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X phys=0x%08X width=%d val=0x%08X a0=0x%08X a1=0x%08X s0=0x%08X s1=0x%08X ra=0x%08X\n", op, b.PacketQueueTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), rp, width, value, uint32(b.CPU.Regs[4]), uint32(b.CPU.Regs[5]), uint32(b.CPU.Regs[16]), uint32(b.CPU.Regs[17]), uint32(b.CPU.Regs[31]))
+}
+
 func (b *Bus) Read8(addr uint32) uint8 {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 1); ok {
-		return b.RAM[rp]
+		v := b.RAM[rp]
+		b.tracePacketQueue("read", rp, 1, uint32(v))
+		return v
 	}
 	if p >= ROM_BASE && p < ROM_BASE+uint32(ROM_MAX) {
 		b.tracePageRead(p, 1)
@@ -164,7 +176,9 @@ func (b *Bus) Read8(addr uint32) uint8 {
 func (b *Bus) Read16(addr uint32) uint16 {
 	p := b.phys(addr)
 	if rp, ok := ramMirror(p, 2); ok {
-		return binary.BigEndian.Uint16(b.RAM[rp:])
+		v := binary.BigEndian.Uint16(b.RAM[rp:])
+		b.tracePacketQueue("read", rp, 2, uint32(v))
+		return v
 	}
 	if p >= ROM_BASE && p < ROM_BASE+uint32(ROM_MAX)-1 {
 		b.tracePageRead(p, 2)
@@ -210,6 +224,7 @@ func (b *Bus) Read32(addr uint32) uint32 {
 	if rp, ok := ramMirror(p, 4); ok {
 		v := binary.BigEndian.Uint32(b.RAM[rp:])
 		b.traceDeviceObjectRead(rp, v)
+		b.tracePacketQueue("read", rp, 4, v)
 		if b.Tracking && ((rp >= 0x710000 && rp <= 0x71FFFF) || (rp >= 0x7F0000 && rp <= 0x7FFFFF)) {
 			b.PollCnt[rp]++
 		}
@@ -254,6 +269,7 @@ func (b *Bus) Write8(addr, val uint32) {
 		fmt.Printf("factory-global write8 step=%d pc=0x%08X inst=0x%08X val=0x%02X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), val&0xFF)
 	}
 	if rp, ok := ramMirror(p, 1); ok {
+		b.tracePacketQueue("write", rp, 1, val&0xFF)
 		if b.Tracking && ((rp >= 0x330 && rp <= 0x590) || (rp >= 0x288 && rp <= 0x28B) || (rp >= 0x101C && rp <= 0x101F) || (rp >= 0x16A0 && rp <= 0x16A3) || (rp >= 0x17A0 && rp <= 0x17A3) || (rp >= 0x1904 && rp <= 0x1909) || (rp >= 0x1CF0 && rp <= 0x1CF7) || (rp >= 0x2240 && rp <= 0x224E) || (rp >= 0x2730 && rp <= 0x2733) || (rp >= 0x7E930 && rp <= 0x7E960) || (rp >= 0x80A88 && rp <= 0x80A98) || (rp >= 0xA510 && rp <= 0xA690) || rp == 0x1E74) && b.CPU != nil {
 			fmt.Printf("RAM watch8 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%02X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val&0xFF)
@@ -292,6 +308,7 @@ func (b *Bus) Write16(addr, val uint32) {
 		fmt.Printf("factory-global write16 step=%d pc=0x%08X inst=0x%08X addr=0x%08X val=0x%04X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), p, val&0xFFFF)
 	}
 	if rp, ok := ramMirror(p, 2); ok {
+		b.tracePacketQueue("write", rp, 2, val&0xFFFF)
 		if b.Tracking && ((rp <= 0x590 && rp+1 >= 0x330) || (rp <= 0x28B && rp+1 >= 0x288) || (rp <= 0x101F && rp+1 >= 0x101C) || (rp <= 0x16A3 && rp+1 >= 0x16A0) || (rp <= 0x17A3 && rp+1 >= 0x17A0) || (rp <= 0x1909 && rp+1 >= 0x1904) || (rp <= 0x1CF7 && rp+1 >= 0x1CF0) || (rp <= 0x224E && rp+1 >= 0x2240) || (rp <= 0x2733 && rp+1 >= 0x2730) || (rp <= 0x7E960 && rp+1 >= 0x7E930) || (rp <= 0x80A98 && rp+1 >= 0x80A88) || (rp <= 0xA690 && rp+1 >= 0xA510) || (rp <= 0x1E74 && rp+1 >= 0x1E74)) && b.CPU != nil {
 			fmt.Printf("RAM watch16 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%04X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val&0xFFFF)
@@ -338,6 +355,7 @@ func (b *Bus) Write32(addr, val uint32) {
 		return
 	}
 	if rp, ok := ramMirror(p, 4); ok {
+		b.tracePacketQueue("write", rp, 4, val)
 		if b.Tracking && ((rp <= 0x590 && rp+3 >= 0x330) || (rp <= 0x28B && rp+3 >= 0x288) || (rp <= 0x101F && rp+3 >= 0x101C) || (rp <= 0x16A3 && rp+3 >= 0x16A0) || (rp <= 0x17A3 && rp+3 >= 0x17A0) || (rp <= 0x1907 && rp+3 >= 0x18F0) || (rp <= 0x1CF7 && rp+3 >= 0x1CF0) || (rp <= 0x224E && rp+3 >= 0x2240) || (rp <= 0x2733 && rp+3 >= 0x2730) || (rp <= 0x7E960 && rp+3 >= 0x7E930) || (rp <= 0x80A98 && rp+3 >= 0x80A88) || (rp <= 0xA690 && rp+3 >= 0xA510) || (rp <= 0x1E74 && rp+3 >= 0x1E74) || (rp <= 0xEEDD0 && rp+3 >= 0xEEDA8) || (rp <= 0xF0B93 && rp+3 >= 0xF0B70)) && b.CPU != nil {
 			fmt.Printf("RAM watch32 PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X phys=0x%08X val=0x%08X\n",
 				b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), addr, rp, val)
