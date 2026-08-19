@@ -44,6 +44,9 @@ type Bus struct {
 	ForceModemDeviceStatus   bool
 	PersistModemDeviceStatus bool
 	ModemDeviceStatus        uint32
+	PersistModemDeviceFields bool
+	ModemDeviceField18C      uint32
+	ModemDeviceField190      uint32
 	ModemPPPBytes            int
 	ModemPPPFrames           uint64
 	ModemLastPPPProtocol     uint16
@@ -95,7 +98,8 @@ type Bus struct {
 
 func NewBus() *Bus {
 	modemDeviceStatus, forceModemDeviceStatus := modemDeviceStatusFromEnv()
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ForceModemDeviceStatus: forceModemDeviceStatus, PersistModemDeviceStatus: os.Getenv("WEBTV_PERSIST_MODEM_STATUS") == "1", ModemDeviceStatus: modemDeviceStatus, ModemFirmware: make(map[uint32]byte)}
+	modemDeviceField18C, modemDeviceField190, persistModemDeviceFields := modemDeviceFieldsFromEnv()
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ForceModemDeviceStatus: forceModemDeviceStatus, PersistModemDeviceStatus: os.Getenv("WEBTV_PERSIST_MODEM_STATUS") == "1", ModemDeviceStatus: modemDeviceStatus, PersistModemDeviceFields: persistModemDeviceFields, ModemDeviceField18C: modemDeviceField18C, ModemDeviceField190: modemDeviceField190, ModemFirmware: make(map[uint32]byte)}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -113,6 +117,21 @@ func modemDeviceStatusFromEnv() (uint32, bool) {
 		return 0x76610000, true
 	}
 	return 0, false
+}
+
+func modemDeviceFieldsFromEnv() (uint32, uint32, bool) {
+	parts := strings.Split(os.Getenv("WEBTV_MODEM_DEVICE_FIELDS"), ",")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	parse := func(value string) (uint32, bool) {
+		value = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(value), "0x"), "0X")
+		parsed, err := strconv.ParseUint(value, 16, 32)
+		return uint32(parsed), err == nil
+	}
+	field18C, ok18C := parse(parts[0])
+	field190, ok190 := parse(parts[1])
+	return field18C, field190, ok18C && ok190
 }
 
 func (b *Bus) LoadBootROM(bank0, bank1 []byte) {
@@ -367,9 +386,21 @@ func (b *Bus) Read16(addr uint32) uint16 {
 
 func (b *Bus) Read32(addr uint32) uint32 {
 	p := b.phys(addr)
-	if b.PersistModemDeviceStatus && p == 0x588 {
-		b.traceDeviceObjectRead(p, b.ModemDeviceStatus)
-		return b.ModemDeviceStatus
+	if b.PersistModemDeviceStatus {
+		switch p {
+		case 0x588:
+			b.traceDeviceObjectRead(p, b.ModemDeviceStatus)
+			return b.ModemDeviceStatus
+		case 0x58C, 0x590:
+			if b.PersistModemDeviceFields {
+				value := b.ModemDeviceField18C
+				if p == 0x590 {
+					value = b.ModemDeviceField190
+				}
+				b.traceDeviceObjectRead(p, value)
+				return value
+			}
+		}
 	}
 	if p >= 0x04000000 && p < 0x04010000 {
 		if b.Tracking {
