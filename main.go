@@ -168,6 +168,7 @@ func main() {
 			newLoopDumped := false
 			videoFlowHits := 0
 			framebufferFlowHits := 0
+			framebufferCallerHits := 0
 			lastResolverKey := ""
 			bus.Tracking = os.Getenv("WEBTV_TRACE_BUS") == "1"
 			compatShims := os.Getenv("WEBTV_COMPAT_SHIMS") == "1"
@@ -186,6 +187,10 @@ func main() {
 				}
 			}
 			for step := 0; step < maxSteps; step++ {
+				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x8022BCB0 && cpu.PC < 0x8022BD30 && framebufferCallerHits < 128 {
+					framebufferCallerHits++
+					fmt.Printf("framebuffer caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X\n", framebufferCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart)
+				}
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x8022BDD0 && cpu.PC < 0x8022BE60 && framebufferFlowHits < 128 {
 					framebufferFlowHits++
 					fmt.Printf("framebuffer flow #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X\n", framebufferFlowHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart)
@@ -1102,6 +1107,7 @@ func main() {
 				printCodeRange(bus, 0x8022A600, 0x8022A720, "video irq dispatch")
 				printCodeRange(bus, 0x8022C240, 0x8022C360, "video irq handler")
 				printCodeRange(bus, 0x8022BD80, 0x8022BE60, "framebuffer start path")
+				printCodeRange(bus, 0x8022BC80, 0x8022BD30, "framebuffer caller")
 				printJALRefs(bus, 0x8022BDD0, 64)
 				printCodeRange(bus, 0x80264480, 0x80264640, "post-gate video loop")
 				printCodeRange(bus, 0x802768C0, 0x80276B20, "post-gate video caller")
