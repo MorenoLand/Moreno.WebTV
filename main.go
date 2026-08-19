@@ -1086,6 +1086,8 @@ func main() {
 				printCodeRange(bus, 0x80229A80, 0x80229C40, "WebTV port probe")
 			}
 			if os.Getenv("WEBTV_TRACE_VIDEO") == "1" {
+				printAccessImmRefs(bus, 0x300C, 64)
+				printStoreImmRefs(bus, 0x300C, 64)
 				printCodeRange(bus, 0x80264480, 0x80264640, "post-gate video loop")
 				printCodeRange(bus, 0x802768C0, 0x80276B20, "post-gate video caller")
 			}
