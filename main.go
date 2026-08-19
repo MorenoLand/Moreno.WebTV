@@ -1072,6 +1072,12 @@ func main() {
 				printCodeRange(bus, 0x80243460, 0x802434B0, "packet queue parser entry")
 				printCodeRange(bus, 0x80243F40, 0x80243FC0, "packet queue secondary consumer")
 				printCodeRange(bus, 0x80229F20, 0x80229FA0, "packet queue dispatch helper")
+				printCodeRange(bus, 0x80229F20, 0x8022A080, "packet queue dispatch helper extended")
+				printCodeRange(bus, 0x8022A700, 0x8022A780, "packet queue release helper")
+				printCodeRange(bus, 0x802221C0, 0x80222220, "packet queue allocation helper")
+				printCodeRange(bus, 0x8023FDE0, 0x8023FE40, "packet queue byte helper")
+				printCodeRange(bus, 0x80229D40, 0x80229DA0, "packet queue list helper")
+				printCodeRange(bus, 0x8024E700, 0x8024E820, "packet queue initializer extended")
 			}
 			if os.Getenv("WEBTV_TRACE_WTV_PORT") == "1" {
 				printCodeRange(bus, 0x80229550, 0x80229620, "WebTV port helpers")
