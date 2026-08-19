@@ -67,6 +67,7 @@ type Bus struct {
 	ModemDLM                 uint8
 	ModemBackdoor            bool
 	ModemReadyAt             uint64
+	ModemNoCarrier           bool
 	ModemLink                *modemTCPLink
 	SkipNullCleanup          bool
 	TraceNullFlow            bool
@@ -104,7 +105,7 @@ func NewBus() *Bus {
 	modemDeviceStatus, forceModemDeviceStatus := modemDeviceStatusFromEnv()
 	modemDeviceField18C, modemDeviceField190, persistModemDeviceFields := modemDeviceFieldsFromEnv()
 	modemQueueProbePtr, modemQueueProbeMask, probeModemQueue := modemQueueProbeFromEnv()
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ForceModemDeviceStatus: forceModemDeviceStatus, PersistModemDeviceStatus: os.Getenv("WEBTV_PERSIST_MODEM_STATUS") == "1", ModemDeviceStatus: modemDeviceStatus, PersistModemDeviceFields: persistModemDeviceFields, ModemDeviceField18C: modemDeviceField18C, ModemDeviceField190: modemDeviceField190, ProbeModemQueue: probeModemQueue, ModemQueueProbePtr: modemQueueProbePtr, ModemQueueProbeMask: modemQueueProbeMask, ModemFirmware: make(map[uint32]byte)}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ForceModemDeviceStatus: forceModemDeviceStatus, PersistModemDeviceStatus: os.Getenv("WEBTV_PERSIST_MODEM_STATUS") == "1", ModemDeviceStatus: modemDeviceStatus, PersistModemDeviceFields: persistModemDeviceFields, ModemDeviceField18C: modemDeviceField18C, ModemDeviceField190: modemDeviceField190, ProbeModemQueue: probeModemQueue, ModemQueueProbePtr: modemQueueProbePtr, ModemQueueProbeMask: modemQueueProbeMask, ModemNoCarrier: os.Getenv("WEBTV_MODEM_NO_CARRIER") == "1", ModemFirmware: make(map[uint32]byte)}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -830,7 +831,7 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 		b.ModemMCR = uint8(val)
 		old := b.ModemMSR & 0xF0
 		current := old
-		if b.ModemStage >= 4 && b.ModemMCR&3 == 3 {
+		if b.ModemStage >= 4 && b.ModemMCR&3 == 3 && !b.ModemNoCarrier {
 			if current == 0 && b.ModemReadyAt == 0 {
 				b.ModemReadyAt = b.Asic.Cycles + 10000
 			}
