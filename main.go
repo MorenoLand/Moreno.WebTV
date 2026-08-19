@@ -1116,7 +1116,8 @@ func main() {
 				printJALRefs(bus, 0x8022BCEC, 64)
 				printJALRefs(bus, 0x8022BDD0, 64)
 				printJALRefs(bus, 0x802C7660, 64)
-				printCodeRange(bus, 0x802C7660, 0x802C7710, "video callback caller")
+				printJALRefs(bus, 0x802C7664, 64)
+				printCodeRange(bus, 0x802C74E0, 0x802C7710, "video callback caller")
 				printCodeRange(bus, 0x80264480, 0x80264640, "post-gate video loop")
 				printCodeRange(bus, 0x802768C0, 0x80276B20, "post-gate video caller")
 			}
