@@ -1030,9 +1030,13 @@ func main() {
 			}
 			if os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1" {
 				printAccessImmRefs(bus, 0x1A3C, 64)
+				printStoreImmRefs(bus, 0x1A3C, 64)
 				printAccessImmRefs(bus, 0x1A40, 64)
+				printStoreImmRefs(bus, 0x1A40, 64)
 				printAccessImmRefs(bus, 0x1A44, 64)
+				printStoreImmRefs(bus, 0x1A44, 64)
 				printAccessImmRefs(bus, 0x1A48, 64)
+				printStoreImmRefs(bus, 0x1A48, 64)
 				printJALRefs(bus, 0x80243480, 32)
 				printJALRefs(bus, 0x80243F50, 32)
 				printJALRefs(bus, 0x80229F3C, 32)
