@@ -1108,6 +1108,7 @@ func main() {
 				printCodeRange(bus, 0x8022C240, 0x8022C360, "video irq handler")
 				printCodeRange(bus, 0x8022BD80, 0x8022BE60, "framebuffer start path")
 				printCodeRange(bus, 0x8022BC80, 0x8022BD30, "framebuffer caller")
+				printJALRefs(bus, 0x8022BCE8, 64)
 				printJALRefs(bus, 0x8022BDD0, 64)
 				printCodeRange(bus, 0x80264480, 0x80264640, "post-gate video loop")
 				printCodeRange(bus, 0x802768C0, 0x80276B20, "post-gate video caller")
