@@ -506,7 +506,7 @@ func (b *Bus) Read32(addr uint32) uint32 {
 }
 
 func (b *Bus) tracePageRead(p, width uint32) {
-	if !b.TracePage || b.CPU == nil || b.TracePageCount >= 64 {
+	if !b.TracePage || b.CPU == nil || b.TracePageCount >= 512 {
 		return
 	}
 	ranges := [...]struct {
