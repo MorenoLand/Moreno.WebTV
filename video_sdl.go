@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/gif"
+	"os"
 	"syscall"
 	"time"
 	"unsafe"
@@ -98,10 +99,16 @@ func showVideoFrame(bus *Bus, done <-chan struct{}) error {
 	}
 	defer s.destroyTexture(texture)
 	frames := stableVideoFrame{presented: splash}
+	captured := false
 	event := [56]byte{}
 	for {
 		data := frames.presented
 		if frame, ok := videoFrameBytes(bus); ok {
+			if os.Getenv("WEBTV_CAPTURE_VIDEO") == "1" && !captured && videoFramePresentable(frame) {
+				captured = true
+				writeYUY2PNG(append([]byte(nil), frame...), videoWidth, videoHeight, "live_video_frame_yuy2.png")
+				fmt.Printf("Captured presentable video frame VID_NSTART=0x%08X\n", bus.Asic.VIDNStart)
+			}
 			data = frames.update(frame, time.Now())
 		}
 		if s.updateTexture(texture, nil, unsafe.Pointer(unsafe.SliceData(data)), videoWidth*2) != 0 {
