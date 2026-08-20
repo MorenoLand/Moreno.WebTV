@@ -16,11 +16,11 @@ The emulator boots real boot ROM code and reaches firmware code paths. Recent wo
 - Delay-slot exceptions preserve branch EPC/BD behavior.
 - Initial SOLO ASIC timer/RIO/scheduler experiments are instrumented.
 
-The normal boot path now passes the external-printer-adapter check and completes the boot-ROM modem download. The current blocker is the post-carrier network transition: the firmware waits for event key `2` at RAM gate byte `0x8000224E`, but the emulator has no in-process PPP/WTVP peer to supply the event or received bytes, so IDE reads and live firmware video have not started. The optional TCP modem bridge forwards serial traffic to an external peer but does not implement PPP itself.
+The normal boot path now selects the built-in Plus WTV port response by default, loads `Connecting.html` and `Startup.html`, and reaches the guest YUY2 framebuffer at `VID_NSTART=0x8000B740` without carrier or PPP. The remaining blocker is the post-startup network transition: the firmware still has no in-process PPP/WTVP peer to supply service data, so IDE reads and later network-driven pages have not started. The optional TCP modem bridge forwards serial traffic to an external peer but does not implement PPP itself.
 
 The SDL2 frame viewer opens by default after the firmware run stops. Set `WEBTV_VIDEO=0` to disable it. It loads `SDL2.dll` from `SDL2_DLL`, then the local `.tools` package, then the system path. The current presentation path uses YUY2, based on the firmware-programmed display buffer.
 
-Set `WEBTV_MODEM_TCP` to a TCP serial-modem peer such as `127.0.0.1:57388` to forward post-download UART bytes and receive peer data. The built-in modem model covers the boot download/carrier bring-up only; it does not claim to be a PPP/WTVP peer. `WEBTV_SYNTHETIC_PPP=1` enables an experimental LCP probe and is excluded from normal verification. Historical RAM-string shortcuts are opt-in with `WEBTV_COMPAT_SHIMS=1`; the WebTV Plus parallel-port status is modeled from the SOLO reset state by default.
+Set `WEBTV_MODEM_TCP` to a TCP serial-modem peer such as `127.0.0.1:57388` to forward post-download UART bytes and receive peer data. The built-in modem model covers the boot download/carrier bring-up only; it does not claim to be a PPP/WTVP peer. `WEBTV_SYNTHETIC_PPP=1` enables an experimental LCP probe and is excluded from normal verification. Historical RAM-string shortcuts are opt-in with `WEBTV_COMPAT_SHIMS=1`; `WEBTV_WTV_PORT_RESPONSE=none` is the explicit unmapped-port negative control, while the built-in Plus response is the default.
 
 ## Repository Layout
 
