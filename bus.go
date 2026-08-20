@@ -88,6 +88,8 @@ type Bus struct {
 	TraceVideoASIC           bool
 	VideoASICTraceCount      uint32
 	VideoTableReadCount      uint32
+	TraceVideoFrame          bool
+	VideoFrameWriteCount     uint32
 	TraceModemTX             bool
 	ModemTXTraceCount        uint32
 	TraceDeviceObject        bool
@@ -108,7 +110,7 @@ func NewBus() *Bus {
 	modemDeviceStatus, forceModemDeviceStatus := modemDeviceStatusFromEnv()
 	modemDeviceField18C, modemDeviceField190, persistModemDeviceFields := modemDeviceFieldsFromEnv()
 	modemQueueProbePtr, modemQueueProbeMask, probeModemQueue := modemQueueProbeFromEnv()
-	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceVideoASIC: os.Getenv("WEBTV_TRACE_VIDEO") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ForceModemDeviceStatus: forceModemDeviceStatus, PersistModemDeviceStatus: os.Getenv("WEBTV_PERSIST_MODEM_STATUS") == "1", ModemDeviceStatus: modemDeviceStatus, PersistModemDeviceFields: persistModemDeviceFields, ModemDeviceField18C: modemDeviceField18C, ModemDeviceField190: modemDeviceField190, ProbeModemQueue: probeModemQueue, ModemQueueProbePtr: modemQueueProbePtr, ModemQueueProbeMask: modemQueueProbeMask, ModemNoCarrier: os.Getenv("WEBTV_MODEM_NO_CARRIER") == "1", ModemFirmware: make(map[uint32]byte)}
+	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceVideoASIC: os.Getenv("WEBTV_TRACE_VIDEO") == "1", TraceVideoFrame: os.Getenv("WEBTV_TRACE_VIDEO_FRAME") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ForceModemDeviceStatus: forceModemDeviceStatus, PersistModemDeviceStatus: os.Getenv("WEBTV_PERSIST_MODEM_STATUS") == "1", ModemDeviceStatus: modemDeviceStatus, PersistModemDeviceFields: persistModemDeviceFields, ModemDeviceField18C: modemDeviceField18C, ModemDeviceField190: modemDeviceField190, ProbeModemQueue: probeModemQueue, ModemQueueProbePtr: modemQueueProbePtr, ModemQueueProbeMask: modemQueueProbeMask, ModemNoCarrier: os.Getenv("WEBTV_MODEM_NO_CARRIER") == "1", ModemFirmware: make(map[uint32]byte)}
 	b.Asic = NewSoloASIC()
 	b.IDE = NewIDEController(b.Asic)
 	b.PollCnt = make(map[uint32]uint64)
@@ -291,6 +293,16 @@ func (b *Bus) traceVideoASICWrite(off, width, value uint32) {
 	}
 	b.VideoASICTraceCount++
 	fmt.Printf("video ASIC write #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X off=0x%04X width=%d val=0x%08X VID_NSTART=0x%08X VIDStat=0x%08X VIDEn=0x%08X BusStat=0x%08X BusEn=0x%08X\n", b.VideoASICTraceCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), off, width, value, b.Asic.VIDNStart, b.Asic.VIDIntStat, b.Asic.VIDIntEnable, b.Asic.BusIntStat, b.Asic.BusIntEnable)
+}
+
+func (b *Bus) traceVideoFrameWrite(p, width, value uint32) {
+	base := b.Asic.VIDNStart & GLOBAL_MASK
+	end := base + uint32(videoWidth*videoHeight*2)
+	if !b.TraceVideoFrame || b.VideoFrameWriteCount >= 128 || b.CPU == nil || base == 0 || p >= end || p+width <= base {
+		return
+	}
+	b.VideoFrameWriteCount++
+	fmt.Printf("video frame RAM write #%d step=%d PC=0x%08X execPC=0x%08X inst=0x%08X addr=0x%08X width=%d val=0x%08X VID_NSTART=0x%08X\n", b.VideoFrameWriteCount, b.CPU.Steps, b.CPU.PC, b.CPU.excPC, b.Read32(b.CPU.excPC), p, width, value, b.Asic.VIDNStart)
 }
 
 func (b *Bus) traceVideoTableRead(p, width, value uint32) {
@@ -537,6 +549,7 @@ func (b *Bus) Write8(addr, val uint32) {
 		fmt.Printf("factory-global write8 step=%d pc=0x%08X inst=0x%08X val=0x%02X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), val&0xFF)
 	}
 	if rp, ok := ramMirror(p, 1); ok {
+		b.traceVideoFrameWrite(rp, 1, val&0xFF)
 		b.traceDevicePage("write", rp, 1, val&0xFF)
 		b.traceDeviceObjectWrite(rp, 1, val&0xFF)
 		b.traceModemGlobal("write", rp, 1, val&0xFF)
@@ -587,6 +600,7 @@ func (b *Bus) Write16(addr, val uint32) {
 		fmt.Printf("factory-global write16 step=%d pc=0x%08X inst=0x%08X addr=0x%08X val=0x%04X\n", b.CPU.Steps, b.CPU.excPC, b.Read32(b.CPU.excPC), p, val&0xFFFF)
 	}
 	if rp, ok := ramMirror(p, 2); ok {
+		b.traceVideoFrameWrite(rp, 2, val&0xFFFF)
 		b.traceDevicePage("write", rp, 2, val&0xFFFF)
 		b.traceDeviceObjectWrite(rp, 2, val&0xFFFF)
 		b.traceModemGlobal("write", rp, 2, val&0xFFFF)
@@ -650,6 +664,7 @@ func (b *Bus) Write32(addr, val uint32) {
 		return
 	}
 	if rp, ok := ramMirror(p, 4); ok {
+		b.traceVideoFrameWrite(rp, 4, val)
 		b.traceDevicePage("write", rp, 4, val)
 		b.traceDeviceObjectWrite(rp, 4, val)
 		b.traceModemGlobal("write", rp, 4, val)
