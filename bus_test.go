@@ -42,6 +42,7 @@ func TestEXLKernelLowRAMBypassesTLBWhenBEVCleared(t *testing.T) {
 }
 
 func TestExpansionProbeIsUnmapped(t *testing.T) {
+	t.Setenv("WEBTV_WTV_PORT_RESPONSE", "none")
 	bus := NewBus()
 
 	if got := bus.Read8(0xA4FFFFF3); got != 0xFF {
@@ -52,7 +53,18 @@ func TestExpansionProbeIsUnmapped(t *testing.T) {
 	}
 }
 
+func TestDefaultWTVPortSelectsBuiltInPlusPath(t *testing.T) {
+	t.Setenv("WEBTV_WTV_PORT_RESPONSE", "")
+	if got, ok := webTVPortResponse(webTVPortProbeAddress, 1); !ok || got != 2 {
+		t.Fatalf("default WTV byte response = %#x, %t; want 0x2, true", got, ok)
+	}
+	if got, ok := webTVPortResponse(webTVPortProbeWordAddress, 4); !ok || got != 0 {
+		t.Fatalf("default WTV word response = %#x, %t; want 0, true", got, ok)
+	}
+}
+
 func TestExpansionProbeDoesNotAliasParallelPortStatus(t *testing.T) {
+	t.Setenv("WEBTV_WTV_PORT_RESPONSE", "none")
 	bus := NewBus()
 	bus.Asic.PPortStatus = 0x08
 	if got := bus.Read8(0xA4FFFFF3); got != 0xFF {

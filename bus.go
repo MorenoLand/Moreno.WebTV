@@ -222,6 +222,8 @@ func (b *Bus) traceWebTVPort(op string, p, width, value uint32) {
 
 func webTVPortResponse(p, width uint32) (uint32, bool) {
 	switch os.Getenv("WEBTV_WTV_PORT_RESPONSE") {
+	case "none":
+		return 0, false
 	case "type2":
 		if p == webTVPortProbeAddress && width == 1 {
 			return 2, true
@@ -229,7 +231,7 @@ func webTVPortResponse(p, width uint32) (uint32, bool) {
 		if p == webTVPortProbeWordAddress && width == 4 {
 			return 0xFFFFFFFF, true
 		}
-	case "type2-zero":
+	case "", "type2-zero":
 		if p == webTVPortProbeAddress && width == 1 {
 			return 2, true
 		}
