@@ -288,7 +288,7 @@ func (b *Bus) traceRIOControl(op string, off, width, value uint32) {
 }
 
 func (b *Bus) traceVideoASICWrite(off, width, value uint32) {
-	if !b.TraceVideoASIC || b.VideoASICTraceCount >= 256 || b.CPU == nil || !((off < 0x1A0 && off+width > 0x80) || (off >= 0x3000 && off < 0x3020)) {
+	if !b.TraceVideoASIC || b.VideoASICTraceCount >= 256 || b.CPU == nil || !((off < 0x1A0 && off+width > 0x80) || (off >= 0x3000 && off < 0x3020) || (off >= 0x6000 && off < 0x60A0) || (off >= 0x9080 && off < 0x90B0)) {
 		return
 	}
 	b.VideoASICTraceCount++
