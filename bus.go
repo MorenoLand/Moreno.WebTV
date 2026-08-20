@@ -297,6 +297,9 @@ func (b *Bus) traceVideoASICWrite(off, width, value uint32) {
 
 func (b *Bus) traceVideoFrameWrite(p, width, value uint32) {
 	base := b.Asic.VIDNStart & GLOBAL_MASK
+	if base == 0 && b.TraceVideoFrame {
+		base = 0x0000B740
+	}
 	end := base + uint32(videoWidth*videoHeight*2)
 	if !b.TraceVideoFrame || b.VideoFrameWriteCount >= 128 || b.CPU == nil || base == 0 || p >= end || p+width <= base {
 		return
