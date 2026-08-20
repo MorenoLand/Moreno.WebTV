@@ -25,17 +25,25 @@ type SoloASIC struct {
 	TimIntEnable uint32
 	TimIntStat   uint32
 
-	DevIntEnable  uint32
-	DevIntStat    uint32
-	RIOIntEnable  uint32
-	RIOIntStat    uint32
-	VIDIntEnable  uint32
-	VIDIntStat    uint32
-	VIDNStart     uint32
-	AUDIntEnable  uint32
-	AUDIntStat    uint32
-	GPIOIntEnable uint32
-	GPIOIntStat   uint32
+	DevIntEnable    uint32
+	DevIntStat      uint32
+	RIOIntEnable    uint32
+	RIOIntStat      uint32
+	VIDIntEnable    uint32
+	VIDIntStat      uint32
+	VIDCStart       uint32
+	VIDCSize        uint32
+	VIDCCnt         uint32
+	VIDNStart       uint32
+	VIDNSize        uint32
+	VIDDMACntl      uint32
+	VideoFrame      []byte
+	VideoMemoryRead func(uint32, []byte) bool
+	VideoDMAReads   uint64
+	AUDIntEnable    uint32
+	AUDIntStat      uint32
+	GPIOIntEnable   uint32
+	GPIOIntStat     uint32
 
 	ErrEnable uint8
 	ErrStat   uint8
@@ -291,8 +299,18 @@ func (a *SoloASIC) Read(off uint32) uint32 {
 		return a.MemCmd
 	case 0x5010:
 		return a.MemTiming
+	case 0x3000:
+		return a.VIDCStart
+	case 0x3004:
+		return a.VIDCSize
+	case 0x3008:
+		return a.VIDCCnt
 	case 0x300C:
 		return a.VIDNStart
+	case 0x3010:
+		return a.VIDNSize
+	case 0x3014:
+		return a.VIDDMACntl
 	default:
 		a.UnmodeledReadHits[off]++
 		if v, ok := a.Regs[off]; ok {
@@ -525,8 +543,19 @@ func (a *SoloASIC) Write(off, data uint32) {
 		a.MemCmd = data
 	case 0x5010:
 		a.MemTiming = data
+	case 0x3000:
+		a.VIDCStart = data
+	case 0x3004:
+		a.VIDCSize = data
+	case 0x3008:
+		a.VIDCCnt = data
 	case 0x300C:
 		a.VIDNStart = data
+	case 0x3010:
+		a.VIDNSize = data
+	case 0x3014:
+		a.VIDDMACntl = data
+		a.RefreshVideoDMA()
 	default:
 		a.UnmodeledWriteHits[off]++
 		a.Regs[off] = data
@@ -647,6 +676,24 @@ func (a *SoloASIC) i2cBitBang(oldSCL, newSCL, oldSDA, newSDA uint8) {
 		i.Bits = 0
 		i.SDA = 1
 	}
+}
+
+func (a *SoloASIC) RefreshVideoDMA() bool {
+	base := a.VIDNStart & GLOBAL_MASK
+	if a.VideoMemoryRead == nil || base == 0 || a.VIDNSize == 0 || a.VIDDMACntl == 0 || a.VIDNSize > RAM_SIZE {
+		return false
+	}
+	if len(a.VideoFrame) != int(a.VIDNSize) {
+		a.VideoFrame = make([]byte, int(a.VIDNSize))
+	}
+	if !a.VideoMemoryRead(base, a.VideoFrame) {
+		return false
+	}
+	a.VideoDMAReads++
+	if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && a.VideoDMAReads <= 4 {
+		fmt.Printf("video DMA read #%d addr=0x%08X bytes=0x%X control=0x%08X\n", a.VideoDMAReads, base, a.VIDNSize, a.VIDDMACntl)
+	}
+	return true
 }
 
 func (a *SoloASIC) Tick(cycles uint64) {
