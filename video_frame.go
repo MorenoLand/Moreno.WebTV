@@ -8,7 +8,7 @@ func videoFrameBytes(bus *Bus) ([]byte, bool) {
 	if bus.Asic.RefreshVideoDMA() && len(bus.Asic.VideoFrame) >= length {
 		return bus.Asic.VideoFrame[:length], true
 	}
-	base := bus.Asic.VIDNStart & 0x1FFFFFFF
+	base := bus.Asic.VIDCStart & 0x1FFFFFFF
 	if base == 0 || uint64(base)+uint64(length) > uint64(len(bus.RAM)) {
 		return nil, false
 	}

@@ -125,6 +125,11 @@ const sysTimerPeriodCycles = 2783333
 const sysTimerStartCycles = 0xFFFFFFFFFFFFFFFF
 const videoFramePeriodCycles = 2783333
 
+const (
+	videoDMAEnable    = 1 << 2
+	videoDMANextValid = 1 << 3
+)
+
 func NewSoloASIC() *SoloASIC {
 	a := &SoloASIC{
 		ChipID:             0x03120000,
@@ -555,6 +560,16 @@ func (a *SoloASIC) Write(off, data uint32) {
 		a.VIDNSize = data
 	case 0x3014:
 		a.VIDDMACntl = data
+		if a.VIDDMACntl&videoDMAEnable == 0 {
+			a.VIDCStart = 0
+			a.VIDCSize = 0
+			a.VIDCCnt = 0
+			a.VideoFrame = nil
+		} else if a.VIDDMACntl&videoDMANextValid != 0 && a.VIDCStart == 0 {
+			a.VIDCStart = a.VIDNStart
+			a.VIDCSize = a.VIDNSize
+			a.VIDCCnt = 0
+		}
 		a.RefreshVideoDMA()
 	default:
 		a.UnmodeledWriteHits[off]++
@@ -679,19 +694,19 @@ func (a *SoloASIC) i2cBitBang(oldSCL, newSCL, oldSDA, newSDA uint8) {
 }
 
 func (a *SoloASIC) RefreshVideoDMA() bool {
-	base := a.VIDNStart & GLOBAL_MASK
-	if a.VideoMemoryRead == nil || base == 0 || a.VIDNSize == 0 || a.VIDDMACntl == 0 || a.VIDNSize > RAM_SIZE {
+	base := a.VIDCStart & GLOBAL_MASK
+	if a.VideoMemoryRead == nil || base == 0 || a.VIDCSize == 0 || a.VIDDMACntl&videoDMAEnable == 0 || a.VIDDMACntl&videoDMANextValid == 0 || a.VIDCSize > RAM_SIZE {
 		return false
 	}
-	if len(a.VideoFrame) != int(a.VIDNSize) {
-		a.VideoFrame = make([]byte, int(a.VIDNSize))
+	if len(a.VideoFrame) != int(a.VIDCSize) {
+		a.VideoFrame = make([]byte, int(a.VIDCSize))
 	}
 	if !a.VideoMemoryRead(base, a.VideoFrame) {
 		return false
 	}
 	a.VideoDMAReads++
 	if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && a.VideoDMAReads <= 4 {
-		fmt.Printf("video DMA read #%d addr=0x%08X bytes=0x%X control=0x%08X\n", a.VideoDMAReads, base, a.VIDNSize, a.VIDDMACntl)
+		fmt.Printf("video DMA read #%d addr=0x%08X bytes=0x%X control=0x%08X\n", a.VideoDMAReads, base, a.VIDCSize, a.VIDDMACntl)
 	}
 	return true
 }

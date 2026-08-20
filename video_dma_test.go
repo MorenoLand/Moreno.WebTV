@@ -17,6 +17,15 @@ func TestSoloASICVideoDMAReadsConfiguredFrame(t *testing.T) {
 	a.Write(0x300C, 0x80000120)
 	a.Write(0x3010, uint32(len(want)))
 	a.Write(0x3014, 0x1F)
+	if got := a.Read(0x3000); got != 0x80000120 {
+		t.Fatalf("VID_CSTART = 0x%X, want 0x80000120", got)
+	}
+	if got := a.Read(0x3004); got != uint32(len(want)) {
+		t.Fatalf("VID_CSIZE = 0x%X, want %d", got, len(want))
+	}
+	if got := a.Read(0x3008); got != 0 {
+		t.Fatalf("VID_CCNT = 0x%X, want 0", got)
+	}
 	if got := a.Read(0x300C); got != 0x80000120 {
 		t.Fatalf("VID_NSTART = 0x%X, want 0x80000120", got)
 	}
@@ -45,7 +54,7 @@ func TestSoloASICVideoDMARequiresControl(t *testing.T) {
 	a.Write(0x300C, 0x80000120)
 	a.Write(0x3010, 4)
 	a.Write(0x3014, 0)
-	if len(a.VideoFrame) != 0 {
+	if a.Read(0x3000) != 0 || len(a.VideoFrame) != 0 {
 		t.Fatalf("video frame allocated while DMA disabled")
 	}
 }

@@ -63,15 +63,18 @@ func TestStableVideoFrameRejectsTopBandOnlyScanout(t *testing.T) {
 	}
 }
 
-func TestVideoFrameBytesUsesVIDNStart(t *testing.T) {
+func TestVideoFrameBytesUsesActiveVideoDMA(t *testing.T) {
 	bus := NewBus()
-	bus.Asic.VIDNStart = 0x80001000
+	bus.RAM[0x1000] = 0x55
+	bus.Asic.Write(0x300C, 0x80001000)
+	bus.Asic.Write(0x3010, videoWidth*videoHeight*2)
+	bus.Asic.Write(0x3014, 0x1F)
 	data, ok := videoFrameBytes(bus)
 	if !ok {
-		t.Fatal("VID_NSTART frame should fit in RAM")
+		t.Fatal("armed video frame should fit in RAM")
 	}
-	if len(data) != videoWidth*videoHeight*2 || &data[0] != &bus.RAM[0x1000] {
-		t.Fatal("frame data does not start at VID_NSTART")
+	if len(data) != videoWidth*videoHeight*2 || data[0] != bus.RAM[0x1000] {
+		t.Fatal("frame data does not start at the active video buffer")
 	}
 }
 
