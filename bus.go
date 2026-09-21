@@ -9,12 +9,13 @@ import (
 )
 
 const (
-	RAM_SIZE      = 8 * 1024 * 1024
-	RAM_APERTURE  = 64 * 1024 * 1024
-	ROM_MAX       = 16 * 1024 * 1024
-	ROM_BASE      = 0x1F000000
-	GLOBAL_MASK   = 0x1FFFFFFF
-	modemSRAMSize = 0x40000
+	RAM_SIZE                  = 8 * 1024 * 1024
+	RAM_APERTURE              = 64 * 1024 * 1024
+	ROM_MAX                   = 16 * 1024 * 1024
+	ROM_BASE                  = 0x1F000000
+	GLOBAL_MASK               = 0x1FFFFFFF
+	modemSRAMSize             = 0x40000
+	modemNoCarrierDelayCycles = 10000
 )
 
 type Bus struct {
@@ -67,6 +68,8 @@ type Bus struct {
 	ModemDLM                 uint8
 	ModemBackdoor            bool
 	ModemReadyAt             uint64
+	ModemNoCarrierAt         uint64
+	ModemNoCarrierQueued     bool
 	ModemNoCarrier           bool
 	ModemLink                *modemTCPLink
 	SkipNullCleanup          bool
@@ -887,9 +890,12 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 			if current == 0 && b.ModemReadyAt == 0 {
 				b.ModemReadyAt = b.Asic.Cycles + 10000
 			}
+		} else if b.ModemStage >= 4 && b.ModemMCR&3 == 3 && b.ModemNoCarrier && !b.ModemNoCarrierQueued && b.ModemNoCarrierAt == 0 {
+			b.ModemNoCarrierAt = b.Asic.Cycles + modemNoCarrierDelayCycles
 		} else {
 			current = 0
 			b.ModemReadyAt = 0
+			b.ModemNoCarrierAt = 0
 		}
 		delta := b.ModemMSR & 0x0F
 		b.ModemMSR = current | delta
@@ -922,6 +928,14 @@ func (b *Bus) Tick(cycles uint64) {
 		}
 		if old&0x80 == 0 {
 			b.ModemMSR |= 0x08
+		}
+	}
+	if b.ModemNoCarrierAt != 0 && b.Asic.Cycles >= b.ModemNoCarrierAt {
+		b.ModemNoCarrierAt = 0
+		b.ModemNoCarrierQueued = true
+		b.queueModemWireRX([]byte("\r\nNO CARRIER\r\n"))
+		if b.CPU != nil {
+			fmt.Printf("modem no-carrier queued step=%d\n", b.CPU.Steps)
 		}
 	}
 	b.updateModemIRQ()
