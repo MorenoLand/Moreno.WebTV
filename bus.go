@@ -311,7 +311,7 @@ func (b *Bus) traceVideoFrameWrite(p, width, value uint32) {
 		base = 0x0000B740
 	}
 	end := base + uint32(videoWidth*videoHeight*2)
-	if !b.TraceVideoFrame || b.VideoFrameWriteCount >= 256 || b.CPU == nil || base == 0 || p >= end || p+width <= base || value == 0xC0EDBABE || value == 0x10801080 || value == 0x2383237F || value == 0x3186317F {
+	if !b.TraceVideoFrame || b.VideoFrameWriteCount >= 256 || b.CPU == nil || base == 0 || p >= end || p+width <= base || value == 0xC0EDBABE || value == 0x10801080 || value == 0x2383237F || value == 0x3186317F || b.CPU.PC >= 0x8025CC40 && b.CPU.PC < 0x8025CD00 {
 		return
 	}
 	b.VideoFrameWriteCount++
