@@ -886,12 +886,14 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 		b.ModemMCR = uint8(val)
 		old := b.ModemMSR & 0xF0
 		current := old
-		if b.ModemStage >= 4 && b.ModemMCR&3 == 3 && !b.ModemNoCarrier {
-			if current == 0 && b.ModemReadyAt == 0 {
+		if b.ModemStage >= 4 && b.ModemMCR&3 == 3 {
+			if b.ModemNoCarrier {
+				if !b.ModemNoCarrierQueued && b.ModemNoCarrierAt == 0 {
+					b.ModemNoCarrierAt = b.Asic.Cycles + modemNoCarrierDelayCycles
+				}
+			} else if current == 0 && b.ModemReadyAt == 0 {
 				b.ModemReadyAt = b.Asic.Cycles + 10000
 			}
-		} else if b.ModemStage >= 4 && b.ModemMCR&3 == 3 && b.ModemNoCarrier && !b.ModemNoCarrierQueued && b.ModemNoCarrierAt == 0 {
-			b.ModemNoCarrierAt = b.Asic.Cycles + modemNoCarrierDelayCycles
 		} else {
 			current = 0
 			b.ModemReadyAt = 0

@@ -11,6 +11,7 @@ func TestModemNoCarrierQueuesDialFailure(t *testing.T) {
 	if bus.ModemNoCarrierAt == 0 {
 		t.Fatal("no-carrier result was not scheduled")
 	}
+	bus.modemWrite(0x10, 0x0B, 1)
 	bus.Tick(modemNoCarrierDelayCycles - 1)
 	if bus.ModemNoCarrierQueued {
 		t.Fatal("no-carrier result queued before delay")
