@@ -16,7 +16,7 @@ The emulator boots real boot ROM code and reaches firmware code paths. Recent wo
 - Delay-slot exceptions preserve branch EPC/BD behavior.
 - Initial SOLO ASIC timer/RIO/scheduler experiments are instrumented.
 
-The normal boot path now selects the built-in Plus WTV port response by default, loads `Connecting.html` and `Startup.html`, and reaches the guest YUY2 framebuffer at `VID_NSTART=0x8000B740` without carrier or PPP. The remaining blocker is the post-startup network transition: the firmware still has no in-process PPP/WTVP peer to supply service data, so IDE reads and later network-driven pages have not started. The optional TCP modem bridge forwards serial traffic to an external peer but does not implement PPP itself.
+The current no-carrier path runs the real firmware through UART failure handling and renders a full guest `RemovePrinterAdapter` warning into the YUY2 framebuffer at `VID_NSTART=0x8000B740`. The unmapped-port path reads `Connecting.html` and `Startup.html` but still never selects a framebuffer; the authentic no-phone-line event/render transition remains the blocker. The optional TCP modem bridge forwards serial traffic to an external peer but does not implement PPP itself.
 
 The SDL2 frame viewer opens by default after the firmware run stops. Set `WEBTV_VIDEO=0` to disable it. It loads `SDL2.dll` from `SDL2_DLL`, then the local `.tools` package, then the system path. The current presentation path uses YUY2, based on the firmware-programmed display buffer.
 
