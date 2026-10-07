@@ -16,7 +16,7 @@ The emulator boots real boot ROM code and reaches firmware code paths. Recent wo
 - Delay-slot exceptions preserve branch EPC/BD behavior.
 - Initial SOLO ASIC timer/RIO/scheduler experiments are instrumented.
 
-The earlier type-2 adapter/no-carrier diagnostic rendered a full guest `RemovePrinterAdapter` warning at `VID_NSTART=0x8000B740`; that was a printer-adapter branch, not normal built-in modem detection. The default now models no external adapter. The firmware enters standby and has a real remote Power input path; the authentic Connecting/Startup screen still requires runtime verification. The optional TCP modem bridge forwards serial traffic to an external peer but does not implement PPP itself.
+The earlier type-2 adapter/no-carrier diagnostic rendered a printer-adapter warning, not normal built-in modem detection. The default now models no external adapter. Remote Power input wakes the real firmware, which renders its authentic `Connecting to WebTV` page with `Preparing to call` and a progress bar. This has been verified in the live guest framebuffer; native-window presentation confirmation remains pending. The optional TCP modem bridge forwards serial traffic to an external peer but does not implement PPP itself.
 
 The SDL2 viewer opens while firmware runs. F1 sends remote Power On through the SOLO IR receiver; key repeats are ignored. Set `WEBTV_VIDEO=0` to disable the viewer. It loads `SDL2.dll` from `SDL2_DLL`, then the local `.tools` package, then the system path. The presentation path uses YUY2, based on the firmware-programmed display buffer.
 
