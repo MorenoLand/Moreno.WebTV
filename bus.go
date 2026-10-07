@@ -62,6 +62,7 @@ type Bus struct {
 	ModemSRAM                [modemSRAMSize]byte
 	CompatShims              bool
 	ModemIER                 uint8
+	ModemTHREPending         bool
 	ModemLCR                 uint8
 	ModemMCR                 uint8
 	ModemMSR                 uint8
@@ -759,6 +760,10 @@ func (b *Bus) modemRead8(off uint32) uint8 {
 	case 0x08:
 		if len(b.ModemRX) != 0 && b.ModemIER&1 != 0 {
 			v = 0x04
+		} else if b.ModemTHREPending && b.ModemIER&2 != 0 {
+			v = 0x02
+			b.ModemTHREPending = false
+			b.updateModemIRQ()
 		} else if b.ModemMSR&0x0F != 0 && b.ModemIER&8 != 0 {
 			v = 0x00
 		} else {
@@ -766,8 +771,10 @@ func (b *Bus) modemRead8(off uint32) uint8 {
 		}
 	case 0x0C:
 		v = b.ModemLCR
+	case 0x10:
+		v = b.ModemMCR
 	case 0x14:
-		v = 0x20
+		v = 0x60
 		if len(b.ModemRX) != 0 {
 			v |= 0x01
 		}
@@ -810,6 +817,7 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 			break
 		}
 		ch := byte(val)
+		b.ModemTHREPending = true
 		if b.ModemStage >= 4 {
 			b.ModemPostCarrierTXBytes++
 			if b.TraceModemTX && b.ModemTXTraceCount < 64 && b.CPU != nil {
@@ -870,16 +878,23 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 			}
 			b.ModemTXLine = b.ModemTXLine[:0]
 		}
+		b.updateModemIRQ()
 	case 0x04:
 		if b.ModemLCR&0x80 != 0 {
 			b.ModemDLM = uint8(val)
 		} else {
+			if b.ModemIER&2 == 0 && uint8(val)&2 != 0 {
+				b.ModemTHREPending = true
+			}
 			b.ModemIER = uint8(val)
 			b.updateModemIRQ()
 		}
 	case 0x08:
 		if val&2 != 0 {
 			b.ModemRX = b.ModemRX[:0]
+		}
+		if val&4 != 0 {
+			b.ModemTHREPending = true
 		}
 		b.updateModemIRQ()
 	case 0x0C:
@@ -1015,7 +1030,7 @@ func (b *Bus) releaseModemRX() {
 }
 
 func (b *Bus) updateModemIRQ() {
-	pending := len(b.ModemRX) != 0 && b.ModemIER&1 != 0 || b.ModemMSR&0x0F != 0 && b.ModemIER&8 != 0
+	pending := len(b.ModemRX) != 0 && b.ModemIER&1 != 0 || b.ModemTHREPending && b.ModemIER&2 != 0 || b.ModemMSR&0x0F != 0 && b.ModemIER&8 != 0
 	if pending {
 		b.Asic.RIOIntStat |= 4
 		b.Asic.BusIntStat |= BUS_INT_RIO
