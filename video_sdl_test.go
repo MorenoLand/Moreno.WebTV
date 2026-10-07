@@ -39,6 +39,21 @@ func TestVideoGeometryMatchesFirmwareFrameSize(t *testing.T) {
 	}
 }
 
+func TestGuestPresentationPreservesSplashReference(t *testing.T) {
+	splash := []byte{16, 128, 16, 128}
+	frames := stableVideoFrame{presented: append([]byte(nil), splash...)}
+	guest := []byte{80, 128, 80, 128}
+	start := time.Unix(0, 0)
+	frames.update(guest, start)
+	data := frames.update(guest, start.Add(videoStableDuration))
+	if !bytes.Equal(splash, []byte{16, 128, 16, 128}) {
+		t.Fatal("guest presentation overwrote the splash reference")
+	}
+	if !bytes.Equal(data, guest) || bytes.Equal(data, splash) {
+		t.Fatal("presented guest pixels cannot be distinguished from the splash")
+	}
+}
+
 func TestStableVideoFrameAcceptsChangingValidScanout(t *testing.T) {
 	splash := []byte{16, 128, 16, 128}
 	frames := stableVideoFrame{presented: splash}

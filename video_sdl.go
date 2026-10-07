@@ -101,7 +101,7 @@ func showVideoFrame(bus *Bus, done <-chan struct{}) error {
 		return fmt.Errorf("SDL_CreateTexture: %s", s.errorString())
 	}
 	defer s.destroyTexture(texture)
-	frames := stableVideoFrame{presented: splash}
+	frames := stableVideoFrame{presented: append([]byte(nil), splash...)}
 	captured := false
 	lastCapture := time.Time{}
 	event := [56]byte{}

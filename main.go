@@ -179,6 +179,7 @@ func main() {
 			bus.Tracking = os.Getenv("WEBTV_TRACE_BUS") == "1"
 			compatShims := os.Getenv("WEBTV_COMPAT_SHIMS") == "1"
 			traceModemWindow := os.Getenv("WEBTV_TRACE_MODEM_RX") == "1"
+			traceGateProducer := os.Getenv("WEBTV_TRACE_GATE_PRODUCER") == "1"
 			modemScriptEmptied := false
 			modemReadyWaitPatched := false
 			schedUnblocked := false
@@ -204,39 +205,39 @@ func main() {
 				if powerAtStep > 0 && step >= powerAtStep && (step-powerAtStep)%1000000 == 0 {
 					fmt.Printf("IR Power state step=%d PC=0x%08X sample=%d control=0x%X FIFO=%d pending=%d reads=%d devStat=0x%X devEn=0x%X busEn=0x%X flags=%02X pulseIn=%d pulseOut=%d keyIn=%d keyOut=%d power=%02X busy=%02X\n", step, cpu.PC, bus.Asic.IRSample, bus.Asic.IRStatCntl, bus.Asic.IRCount, len(bus.Asic.IRPending), bus.Asic.ReadHits[0x4028], bus.Asic.DevIntStat, bus.Asic.DevIntEnable, bus.Asic.BusIntEnable, bus.RAM[0x1308], binary.BigEndian.Uint32(bus.RAM[0x13B8:]), binary.BigEndian.Uint32(bus.RAM[0x13BC:]), binary.BigEndian.Uint32(bus.RAM[0x13A8:]), binary.BigEndian.Uint32(bus.RAM[0x13AC:]), bus.RAM[0x224E], bus.RAM[0x2240])
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x8022BCB0 && cpu.PC < 0x8022BD30 && framebufferCallerHits < 128 {
+				if bus.TraceVideoASIC && cpu.PC >= 0x8022BCB0 && cpu.PC < 0x8022BD30 && framebufferCallerHits < 128 {
 					framebufferCallerHits++
 					fmt.Printf("framebuffer caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X\n", framebufferCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart)
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && framebufferDirectCallerHits < 256 && ((cpu.PC >= 0x80215D80 && cpu.PC < 0x80215DE0) || (cpu.PC >= 0x80220820 && cpu.PC < 0x80220880) || (cpu.PC >= 0x80220AC0 && cpu.PC < 0x80220B40) || (cpu.PC >= 0x80220F40 && cpu.PC < 0x80220FC0) || (cpu.PC >= 0x80220FD0 && cpu.PC < 0x80221090)) {
+				if bus.TraceVideoASIC && framebufferDirectCallerHits < 256 && ((cpu.PC >= 0x80215D80 && cpu.PC < 0x80215DE0) || (cpu.PC >= 0x80220820 && cpu.PC < 0x80220880) || (cpu.PC >= 0x80220AC0 && cpu.PC < 0x80220B40) || (cpu.PC >= 0x80220F40 && cpu.PC < 0x80220FC0) || (cpu.PC >= 0x80220FD0 && cpu.PC < 0x80221090)) {
 					framebufferDirectCallerHits++
 					fmt.Printf("framebuffer direct caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X VID_NSTART=0x%08X b2240=0x%08X b224E=0x%02X\n", framebufferDirectCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], bus.Asic.VIDNStart, bus.Read32(0x80002240), bus.Read8(0x8000224E))
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && framebufferStateHits < 256 && ((cpu.PC >= 0x80214740 && cpu.PC < 0x802147B0) || (cpu.PC >= 0x8021C6C0 && cpu.PC < 0x8021C720) || (cpu.PC >= 0x8021C9F0 && cpu.PC < 0x8021CA60) || (cpu.PC >= 0x8021D000 && cpu.PC < 0x8021D070) || (cpu.PC >= 0x80220870 && cpu.PC < 0x802208C0) || (cpu.PC >= 0x80220A80 && cpu.PC < 0x80220B30)) {
+				if bus.TraceVideoASIC && framebufferStateHits < 256 && ((cpu.PC >= 0x80214740 && cpu.PC < 0x802147B0) || (cpu.PC >= 0x8021C6C0 && cpu.PC < 0x8021C720) || (cpu.PC >= 0x8021C9F0 && cpu.PC < 0x8021CA60) || (cpu.PC >= 0x8021D000 && cpu.PC < 0x8021D070) || (cpu.PC >= 0x80220870 && cpu.PC < 0x802208C0) || (cpu.PC >= 0x80220A80 && cpu.PC < 0x80220B30)) {
 					framebufferStateHits++
 					fmt.Printf("framebuffer state #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X state1710=0x%08X state1718=0x%08X state1930=0x%08X state6340=0x%08X state6754=0x%08X VID_NSTART=0x%08X\n", framebufferStateHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], bus.Read32(0x80001710), bus.Read32(0x80001718), bus.Read32(0x80001930), bus.Read32(0x80006340), bus.Read32(0x80006754), bus.Asic.VIDNStart)
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && displayCallerHits < 256 && ((cpu.PC >= 0x80215680 && cpu.PC < 0x80215790) || (cpu.PC >= 0x80215980 && cpu.PC < 0x80215AA0) || (cpu.PC >= 0x80221080 && cpu.PC < 0x80221180)) {
+				if bus.TraceVideoASIC && displayCallerHits < 256 && ((cpu.PC >= 0x80215680 && cpu.PC < 0x80215790) || (cpu.PC >= 0x80215980 && cpu.PC < 0x80215AA0) || (cpu.PC >= 0x80221080 && cpu.PC < 0x80221180)) {
 					displayCallerHits++
 					fmt.Printf("display caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X s3=0x%016X ra=0x%016X state1710=0x%08X state1714=0x%08X state1718=0x%08X state1930=0x%08X state6754=0x%08X VID_NSTART=0x%08X\n", displayCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[19], cpu.Regs[31], bus.Read32(0x80001710), bus.Read32(0x80001714), bus.Read32(0x80001718), bus.Read32(0x80001930), bus.Read32(0x80006754), bus.Asic.VIDNStart)
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && displayDispatchHits < 512 && cpu.PC >= 0x80215400 && cpu.PC < 0x80215B00 {
+				if bus.TraceVideoASIC && displayDispatchHits < 512 && cpu.PC >= 0x80215400 && cpu.PC < 0x80215B00 {
 					displayDispatchHits++
 					fmt.Printf("display dispatch #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X table208B8=0x%08X tableData=0x%08X state1710=0x%08X state1714=0x%08X\n", displayDispatchHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Read32(0x8032FB14), bus.Read32(0x8032F8DC), bus.Read32(0x80001710), bus.Read32(0x80001714))
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x802C74E0 && cpu.PC < 0x802C7660 && videoCallbackDispatchHits < 256 {
+				if bus.TraceVideoASIC && cpu.PC >= 0x802C74E0 && cpu.PC < 0x802C7660 && videoCallbackDispatchHits < 256 {
 					videoCallbackDispatchHits++
 					fmt.Printf("video callback dispatch #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X b2240=0x%08X b224E=0x%02X\n", videoCallbackDispatchHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart, bus.Read32(0x80002240), bus.Read8(0x8000224E))
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x802C7660 && cpu.PC < 0x802C76F8 && videoCallbackHits < 128 {
+				if bus.TraceVideoASIC && cpu.PC >= 0x802C7660 && cpu.PC < 0x802C76F8 && videoCallbackHits < 128 {
 					videoCallbackHits++
 					fmt.Printf("video callback flow #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X b2240=0x%08X b224E=0x%02X\n", videoCallbackHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart, bus.Read32(0x80002240), bus.Read8(0x8000224E))
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x8022BDD0 && cpu.PC < 0x8022BE60 && framebufferFlowHits < 128 {
+				if bus.TraceVideoASIC && cpu.PC >= 0x8022BDD0 && cpu.PC < 0x8022BE60 && framebufferFlowHits < 128 {
 					framebufferFlowHits++
 					fmt.Printf("framebuffer flow #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X\n", framebufferFlowHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart)
 				}
-				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && ((cpu.PC >= 0x802C44D0 && cpu.PC < 0x802C4660) || (cpu.PC >= 0x8022A680 && cpu.PC < 0x8022A720) || (cpu.PC >= 0x8022C240 && cpu.PC < 0x8022C360) || (cpu.PC >= 0x8022BD80 && cpu.PC < 0x8022BE60) || (cpu.PC >= 0x802C7660 && cpu.PC < 0x802C7710)) && videoFlowHits < 256 {
+				if bus.TraceVideoASIC && ((cpu.PC >= 0x802C44D0 && cpu.PC < 0x802C4660) || (cpu.PC >= 0x8022A680 && cpu.PC < 0x8022A720) || (cpu.PC >= 0x8022C240 && cpu.PC < 0x8022C360) || (cpu.PC >= 0x8022BD80 && cpu.PC < 0x8022BE60) || (cpu.PC >= 0x802C7660 && cpu.PC < 0x802C7710)) && videoFlowHits < 256 {
 					videoFlowHits++
 					fmt.Printf("video flow #%d step=%d PC=0x%08X inst=0x%08X excPC=0x%08X Status=0x%08X Cause=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X VIDStat=0x%08X VIDEn=0x%08X BusStat=0x%08X BusEn=0x%08X objB218=0x%08X\n", videoFlowHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.excPC, cpu.COP0[Status], cpu.COP0[Cause], cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart, bus.Asic.VIDIntStat, bus.Asic.VIDIntEnable, bus.Asic.BusIntStat, bus.Asic.BusIntEnable, binary.BigEndian.Uint32(bus.RAM[0xB218:]))
 				}
@@ -631,7 +632,7 @@ func main() {
 					fmt.Printf("gate queue caller %02d step=%d PC=0x%08X inst=0x%08X v0=0x%016X a0=0x%016X a1=0x%016X s0=0x%016X s1=0x%016X ra=0x%016X q80A8C=%08X\n",
 						gateQueueCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[4], cpu.Regs[5], cpu.Regs[16], cpu.Regs[17], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x80A8C:]))
 				}
-				if os.Getenv("WEBTV_TRACE_GATE_PRODUCER") == "1" && cpu.PC >= 0x80234E80 && cpu.PC < 0x80235000 && gateProducerTraceHits < 256 {
+				if traceGateProducer && cpu.PC >= 0x80234E80 && cpu.PC < 0x80235000 && gateProducerTraceHits < 256 {
 					gateProducerTraceHits++
 					fmt.Printf("gate producer trace %03d step=%d PC=0x%08X inst=0x%08X v0=0x%016X v1=0x%016X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X q1A3C=%08X q1A40=%08X g1E74=%08X\n",
 						gateProducerTraceHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[2], cpu.Regs[3], cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], binary.BigEndian.Uint32(bus.RAM[0x1A3C:]), binary.BigEndian.Uint32(bus.RAM[0x1A40:]), binary.BigEndian.Uint32(bus.RAM[0x1E74:]))
