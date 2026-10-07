@@ -25,6 +25,7 @@ type Bus struct {
 	Asic                     *SoloASIC
 	IDE                      *IDEController
 	CPU                      *CPU
+	IRInput                  chan byte
 	AsicReadCnt              [0x10000]uint64
 	Tracking                 bool
 	PollCnt                  map[uint32]uint64
@@ -115,6 +116,7 @@ func NewBus() *Bus {
 	modemQueueProbePtr, modemQueueProbeMask, probeModemQueue := modemQueueProbeFromEnv()
 	b := &Bus{SkipNullCleanup: os.Getenv("WEBTV_SKIP_NULL_CLEANUP") == "1", TraceNullFlow: os.Getenv("WEBTV_TRACE_NULL_FLOW") == "1", TraceDeviceField: os.Getenv("WEBTV_TRACE_DEVICE_FIELD") == "1", TracePage: os.Getenv("WEBTV_TRACE_PAGE") == "1", TraceWebTVPort: os.Getenv("WEBTV_TRACE_WTV_PORT") == "1", TraceRIOControl: os.Getenv("WEBTV_TRACE_RIO_CONTROL") == "1", TraceVideoASIC: os.Getenv("WEBTV_TRACE_VIDEO") == "1", TraceVideoFrame: os.Getenv("WEBTV_TRACE_VIDEO_FRAME") == "1", TraceModemTX: os.Getenv("WEBTV_TRACE_MODEM_TX") == "1", TraceModemPPP: os.Getenv("WEBTV_TRACE_MODEM_PPP") == "1", TraceDeviceObject: os.Getenv("WEBTV_TRACE_DEVICE_OBJECT") == "1", TraceDevicePage: os.Getenv("WEBTV_TRACE_DEVICE_PAGE") == "1", TracePacketQueue: os.Getenv("WEBTV_TRACE_PACKET_QUEUE") == "1", SyntheticPPP: os.Getenv("WEBTV_SYNTHETIC_PPP") == "1", CompatShims: os.Getenv("WEBTV_COMPAT_SHIMS") == "1", ForceModemDeviceStatus: forceModemDeviceStatus, PersistModemDeviceStatus: os.Getenv("WEBTV_PERSIST_MODEM_STATUS") == "1", ModemDeviceStatus: modemDeviceStatus, PersistModemDeviceFields: persistModemDeviceFields, ModemDeviceField18C: modemDeviceField18C, ModemDeviceField190: modemDeviceField190, ProbeModemQueue: probeModemQueue, ModemQueueProbePtr: modemQueueProbePtr, ModemQueueProbeMask: modemQueueProbeMask, ModemNoCarrier: os.Getenv("WEBTV_MODEM_NO_CARRIER") == "1", ModemFirmware: make(map[uint32]byte)}
 	b.Asic = NewSoloASIC()
+	b.IRInput = make(chan byte, 16)
 	b.Asic.VideoMemoryRead = func(addr uint32, dst []byte) bool {
 		if len(dst) == 0 || uint64(addr)+uint64(len(dst)) > uint64(len(b.RAM)) {
 			return false
@@ -234,7 +236,7 @@ func (b *Bus) traceWebTVPort(op string, p, width, value uint32) {
 
 func webTVPortResponse(p, width uint32) (uint32, bool) {
 	switch os.Getenv("WEBTV_WTV_PORT_RESPONSE") {
-	case "none":
+	case "", "none":
 		return 0, false
 	case "type2":
 		if p == webTVPortProbeAddress && width == 1 {
@@ -243,7 +245,7 @@ func webTVPortResponse(p, width uint32) (uint32, bool) {
 		if p == webTVPortProbeWordAddress && width == 4 {
 			return 0xFFFFFFFF, true
 		}
-	case "", "type2-zero":
+	case "type2-zero":
 		if p == webTVPortProbeAddress && width == 1 {
 			return 2, true
 		}
@@ -915,6 +917,11 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 }
 
 func (b *Bus) Tick(cycles uint64) {
+	select {
+	case command := <-b.IRInput:
+		b.Asic.QueueIRTransitions(remoteIRTransitions(command))
+	default:
+	}
 	b.Asic.Tick(cycles)
 	b.pollModemLink()
 	b.releaseModemRX()

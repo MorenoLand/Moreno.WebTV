@@ -187,12 +187,20 @@ func main() {
 			gateQueueWord := binary.BigEndian.Uint32(bus.RAM[0x80A8C:])
 			synthClock := os.Getenv("WEBTV_SYNTH_CLOCK") == "1"
 			maxSteps := 650_000_000
+			if os.Getenv("WEBTV_VIDEO") != "0" {
+				maxSteps = 0
+			}
+			powerAtStep, _ := strconv.Atoi(os.Getenv("WEBTV_POWER_AT_STEP"))
 			if value := os.Getenv("WEBTV_STEPS"); value != "" {
 				if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
 					maxSteps = parsed
 				}
 			}
-			for step := 0; step < maxSteps; step++ {
+			for step := 0; maxSteps == 0 || step < maxSteps; step++ {
+				if powerAtStep > 0 && step == powerAtStep {
+					bus.Asic.QueueIRTransitions(remoteIRTransitions(0x2E))
+					fmt.Printf("Remote Power input step=%d\n", step)
+				}
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x8022BCB0 && cpu.PC < 0x8022BD30 && framebufferCallerHits < 128 {
 					framebufferCallerHits++
 					fmt.Printf("framebuffer caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X\n", framebufferCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart)

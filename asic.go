@@ -61,9 +61,17 @@ type SoloASIC struct {
 	WTVCntl  uint32
 	RIOCntl  uint32
 
-	LEDState uint32
-	IRCntl   uint32
-	NVCntl   uint8
+	LEDState   uint32
+	IRCntl     uint32
+	NVCntl     uint8
+	IRSample   uint32
+	IRReject   uint32
+	IRStatCntl uint32
+	IRFIFO     [16]uint16
+	IRHead     int
+	IRCount    int
+	IRPending  []uint16
+	IRNextAt   uint64
 
 	GPIOIn      uint32
 	GPIOOut     uint32
@@ -124,6 +132,7 @@ const rioPollPeriodCycles = 200000
 const sysTimerPeriodCycles = 2783333
 const sysTimerStartCycles = 0xFFFFFFFFFFFFFFFF
 const videoFramePeriodCycles = 2783333
+const irInterruptMask = 1 << 2
 
 const (
 	videoDMAEnable    = 1 << 2
@@ -272,8 +281,22 @@ func (a *SoloASIC) Read(off uint32) uint32 {
 		return a.GPIOOut & a.GPIOOutMask
 	case 0x4018, 0x4118:
 		return a.GPIOInMask
-	case 0x4020, 0x4024, 0x4028, 0x402C:
-		return 0
+	case 0x4020:
+		return a.IRSample
+	case 0x4024:
+		return a.IRReject
+	case 0x4028:
+		if a.IRCount == 0 {
+			return 0
+		}
+		count := min(a.IRCount, 15)
+		value := uint32(a.IRFIFO[a.IRHead]) | uint32(count)<<12
+		a.IRHead = (a.IRHead + 1) & 15
+		a.IRCount--
+		a.updateIRInterrupt()
+		return value
+	case 0x402C:
+		return a.IRStatCntl
 	case 0x4200:
 		if a.PPortEnabled == 0 {
 			return 0
@@ -337,6 +360,7 @@ func (a *SoloASIC) Write(off, data uint32) {
 		a.BusIntStat |= data
 	case 0x0108:
 		a.BusIntStat &^= data
+		a.updateDeviceInterrupt()
 	case 0x000C:
 		a.BusIntEnable |= data
 	case 0x010C:
@@ -390,16 +414,16 @@ func (a *SoloASIC) Write(off, data uint32) {
 		a.AUDIntStat &^= data
 	case 0x007C:
 		a.DevIntEnable |= data
+		a.updateIRInterrupt()
 	case 0x017C:
-		a.DevIntStat &^= data
 		a.DevIntEnable &^= data
+		a.updateDeviceInterrupt()
 	case 0x0078:
 		a.DevIntStat |= data
+		a.updateDeviceInterrupt()
 	case 0x0174:
 		a.DevIntStat &^= data
-		if a.DevIntStat&a.DevIntEnable == 0 {
-			a.BusIntStat &^= BUS_INT_DEVICE
-		}
+		a.updateIRInterrupt()
 	case 0x0088:
 		a.VIDIntEnable |= data
 		if a.VIDIntEnable != 0 && a.VideoNext == 0 {
@@ -524,7 +548,27 @@ func (a *SoloASIC) Write(off, data uint32) {
 	case 0x4118:
 		a.GPIOOutMask &^= data
 		a.GPIOInMask = ^a.GPIOOutMask
-	case 0x4020, 0x4024, 0x402C:
+	case 0x4020:
+		previous := a.IRSample
+		a.IRSample = data & 0xFFFF
+		if previous == 0 || a.IRSample == 0 {
+			a.scheduleIRTransition()
+		}
+	case 0x4024:
+		a.IRReject = data & 0xFF
+	case 0x402C:
+		previous := a.IRStatCntl
+		a.IRStatCntl = data & 0xF5
+		if data&2 != 0 {
+			a.IRHead = 0
+			a.IRCount = 0
+			a.IRPending = nil
+			a.IRNextAt = 0
+		}
+		if previous&1 == 0 || a.IRStatCntl&1 == 0 {
+			a.scheduleIRTransition()
+		}
+		a.updateIRInterrupt()
 	case 0x4200:
 		a.PPortData = data & 0xFF
 	case 0x4204:
@@ -711,8 +755,54 @@ func (a *SoloASIC) RefreshVideoDMA() bool {
 	return true
 }
 
+func (a *SoloASIC) QueueIRTransitions(transitions []uint16) {
+	if len(transitions) == 0 {
+		return
+	}
+	empty := len(a.IRPending) == 0
+	for _, transition := range transitions {
+		a.IRPending = append(a.IRPending, transition&0x0FFF)
+	}
+	if empty {
+		a.scheduleIRTransition()
+	}
+}
+func (a *SoloASIC) scheduleIRTransition() {
+	a.IRNextAt = 0
+	if a.IRStatCntl&1 != 0 && a.IRSample != 0 && len(a.IRPending) != 0 {
+		a.IRNextAt = a.Cycles + uint64(a.IRPending[0]&0x7FF)*uint64(a.IRSample)
+	}
+}
+func (a *SoloASIC) updateIRInterrupt() {
+	if a.IRStatCntl&1 != 0 && a.IRCount != 0 && a.IRCount >= int((a.IRStatCntl>>4)&15) {
+		a.DevIntStat |= irInterruptMask
+	}
+	a.updateDeviceInterrupt()
+}
+func (a *SoloASIC) updateDeviceInterrupt() {
+	if a.DevIntStat&a.DevIntEnable != 0 {
+		a.BusIntStat |= BUS_INT_DEVICE
+	} else {
+		a.BusIntStat &^= BUS_INT_DEVICE
+	}
+}
 func (a *SoloASIC) Tick(cycles uint64) {
 	a.Cycles += cycles
+	if a.IRStatCntl&1 != 0 && a.IRSample != 0 {
+		for len(a.IRPending) != 0 && a.IRNextAt <= a.Cycles {
+			if a.IRCount < len(a.IRFIFO) {
+				a.IRFIFO[(a.IRHead+a.IRCount)&15] = a.IRPending[0]
+				a.IRCount++
+			}
+			a.IRPending = a.IRPending[1:]
+			if len(a.IRPending) == 0 {
+				a.IRNextAt = 0
+			} else {
+				a.IRNextAt += uint64(a.IRPending[0]&0x7FF) * uint64(a.IRSample)
+			}
+		}
+	}
+	a.updateIRInterrupt()
 	if a.VIDIntEnable != 0 {
 		if a.VideoNext == 0 {
 			a.VideoNext = a.Cycles + videoFramePeriodCycles
@@ -752,6 +842,7 @@ const (
 )
 
 func (a *SoloASIC) PendingIP2() bool {
+	a.updateDeviceInterrupt()
 	if a.VIDIntStat&a.VIDIntEnable != 0 {
 		return true
 	}
@@ -776,9 +867,7 @@ func (a *SoloASIC) assertBusIRQ() {
 	if a.RIOIntStat != 0 {
 		a.BusIntStat |= BUS_INT_RIO
 	}
-	if a.DevIntStat != 0 {
-		a.BusIntStat |= BUS_INT_DEVICE
-	}
+	a.updateDeviceInterrupt()
 }
 
 func (a *SoloASIC) UpdateTimerInterrupt(cpuCount, cpuCompare uint32) {

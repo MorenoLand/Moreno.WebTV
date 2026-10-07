@@ -2,9 +2,36 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"testing"
 	"time"
 )
+
+func TestSDLRemotePowerInput(t *testing.T) {
+	event := make([]byte, 56)
+	binary.LittleEndian.PutUint32(event[:4], sdlKeyDownEvent)
+	binary.LittleEndian.PutUint32(event[20:24], sdlKeyF1)
+	if command, ok := sdlRemoteCommand(event); !ok || command != 0x2E {
+		t.Fatalf("Power command=%#x, %t", command, ok)
+	}
+	event[13] = 1
+	if _, ok := sdlRemoteCommand(event); ok {
+		t.Fatal("key repeat emitted Power")
+	}
+	event[13] = 0
+	binary.LittleEndian.PutUint32(event[:4], sdlKeyDownEvent+1)
+	if _, ok := sdlRemoteCommand(event); ok {
+		t.Fatal("key release emitted Power")
+	}
+	binary.LittleEndian.PutUint32(event[:4], sdlKeyDownEvent)
+	binary.LittleEndian.PutUint32(event[20:24], 'a')
+	if _, ok := sdlRemoteCommand(event); ok {
+		t.Fatal("unrelated key emitted Power")
+	}
+	if _, ok := sdlRemoteCommand(event[:8]); ok {
+		t.Fatal("short event emitted Power")
+	}
+}
 
 func TestVideoGeometryMatchesFirmwareFrameSize(t *testing.T) {
 	if got := videoWidth * videoHeight * 2; got != 0x72D80 {

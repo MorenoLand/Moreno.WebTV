@@ -1,4 +1,4 @@
-# Moreno.WebTV
+# WebTV Plus Emulator
 
 Standalone Go emulator workbench for WebTV Plus preservation.
 
@@ -16,11 +16,11 @@ The emulator boots real boot ROM code and reaches firmware code paths. Recent wo
 - Delay-slot exceptions preserve branch EPC/BD behavior.
 - Initial SOLO ASIC timer/RIO/scheduler experiments are instrumented.
 
-The current no-carrier path runs the real firmware through UART failure handling and renders a full guest `RemovePrinterAdapter` warning into the YUY2 framebuffer at `VID_NSTART=0x8000B740`. The unmapped-port path reads `Connecting.html` and `Startup.html` but still never selects a framebuffer; the authentic no-phone-line event/render transition remains the blocker. The optional TCP modem bridge forwards serial traffic to an external peer but does not implement PPP itself.
+The earlier type-2 adapter/no-carrier diagnostic rendered a full guest `RemovePrinterAdapter` warning at `VID_NSTART=0x8000B740`; that was a printer-adapter branch, not normal built-in modem detection. The default now models no external adapter. The firmware enters standby and has a real remote Power input path; the authentic Connecting/Startup screen still requires runtime verification. The optional TCP modem bridge forwards serial traffic to an external peer but does not implement PPP itself.
 
-The SDL2 frame viewer opens by default after the firmware run stops. Set `WEBTV_VIDEO=0` to disable it. It loads `SDL2.dll` from `SDL2_DLL`, then the local `.tools` package, then the system path. The current presentation path uses YUY2, based on the firmware-programmed display buffer.
+The SDL2 viewer opens while firmware runs. F1 sends remote Power On through the SOLO IR receiver; key repeats are ignored. Set `WEBTV_VIDEO=0` to disable the viewer. It loads `SDL2.dll` from `SDL2_DLL`, then the local `.tools` package, then the system path. The presentation path uses YUY2, based on the firmware-programmed display buffer.
 
-Set `WEBTV_MODEM_TCP` to a TCP serial-modem peer such as `127.0.0.1:57388` to forward post-download UART bytes and receive peer data. The built-in modem model covers the boot download/carrier bring-up only; it does not claim to be a PPP/WTVP peer. `WEBTV_SYNTHETIC_PPP=1` enables an experimental LCP probe and is excluded from normal verification. Historical RAM-string shortcuts are opt-in with `WEBTV_COMPAT_SHIMS=1`; `WEBTV_WTV_PORT_RESPONSE=none` is the explicit unmapped-port negative control, while the built-in Plus response is the default.
+Set `WEBTV_MODEM_TCP` to a TCP serial-modem peer such as `127.0.0.1:57388` to forward post-download UART bytes and receive peer data. The built-in modem model covers the boot download/carrier bring-up only; it does not claim to be a PPP/WTVP peer. `WEBTV_SYNTHETIC_PPP=1` enables an experimental LCP probe and is excluded from normal verification. Historical RAM-string shortcuts are opt-in with `WEBTV_COMPAT_SHIMS=1`; `WEBTV_WTV_PORT_RESPONSE=none` is equivalent to the default unmapped adapter port, and `type2-zero` retains the old printer-adapter diagnostic. `WEBTV_POWER_AT_STEP` schedules one hardware Power On input for headless verification, without changing guest RAM or event lists.
 
 ## Repository Layout
 
@@ -42,22 +42,18 @@ Expected local inputs include:
 - `roms/ptnvram.iic` if available
 - a WebTV Plus disk/flash image, passed on the command line
 
-## Build And Test
+## Run And Test
 
-This repo is plain Go and currently uses the local Go 1.21 toolchain.
+This repo is plain Go and requires Go 1.21 or later.
 
 ```powershell
-$env:GOMODCACHE='G:\Development\Go\.gomodcache'
-$env:GOCACHE='G:\Development\Go\.gocache'
-$env:GOTOOLCHAIN='local'
 go test ./...
-go build -buildvcs=false -o webtv_trace.exe .
 ```
 
 Run with a local firmware image:
 
 ```powershell
-.\webtv_trace.exe "G:\Development\Working\WebTV Preservation\HackTV-7352-ndb-For_Old_WebTV_Plus-Themes-8-16-2025.img"
+go run . "firmware.img"
 ```
 
 ## Notes

@@ -53,13 +53,20 @@ func TestExpansionProbeIsUnmapped(t *testing.T) {
 	}
 }
 
-func TestDefaultWTVPortSelectsBuiltInPlusPath(t *testing.T) {
+func TestDefaultWTVPortHasNoExternalAdapter(t *testing.T) {
 	t.Setenv("WEBTV_WTV_PORT_RESPONSE", "")
-	if got, ok := webTVPortResponse(webTVPortProbeAddress, 1); !ok || got != 2 {
-		t.Fatalf("default WTV byte response = %#x, %t; want 0x2, true", got, ok)
+	if got, ok := webTVPortResponse(webTVPortProbeAddress, 1); ok {
+		t.Fatalf("default WTV byte advertises an adapter: %#x", got)
 	}
-	if got, ok := webTVPortResponse(webTVPortProbeWordAddress, 4); !ok || got != 0 {
-		t.Fatalf("default WTV word response = %#x, %t; want 0, true", got, ok)
+	bus := NewBus()
+	if got := bus.Read8(0xA4FFFFF3); got != 0xFF {
+		t.Fatalf("default adapter byte = %#x, want 0xFF", got)
+	}
+	if got := bus.Read32(0xA4FFFFF0); got != 0xFFFFFFFF {
+		t.Fatalf("default adapter word = %#x, want 0xFFFFFFFF", got)
+	}
+	if got, ok := webTVPortResponse(webTVPortProbeWordAddress, 4); ok {
+		t.Fatalf("default WTV word advertises an adapter: %#x", got)
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"image"
 	"image/gif"
@@ -20,6 +21,8 @@ const (
 	sdlTextureStreaming    = 1
 	sdlPixelFormatYUY2     = 0x32595559
 	sdlQuitEvent           = 0x100
+	sdlKeyDownEvent        = 0x300
+	sdlKeyF1               = 1<<30 | 58
 	videoStableDuration    = 150 * time.Millisecond
 )
 
@@ -118,8 +121,16 @@ func showVideoFrame(bus *Bus, done <-chan struct{}) error {
 			return fmt.Errorf("SDL_RenderCopy: %s", s.errorString())
 		}
 		s.renderPresent(renderer)
-		if s.waitEventTimeout(unsafe.Pointer(&event[0]), 16) != 0 && *(*uint32)(unsafe.Pointer(&event[0])) == sdlQuitEvent {
-			return nil
+		if s.waitEventTimeout(unsafe.Pointer(&event[0]), 16) != 0 {
+			if binary.LittleEndian.Uint32(event[:4]) == sdlQuitEvent {
+				return nil
+			}
+			if command, ok := sdlRemoteCommand(event[:]); ok {
+				select {
+				case bus.IRInput <- command:
+				default:
+				}
+			}
 		}
 		select {
 		case <-done:
@@ -127,6 +138,16 @@ func showVideoFrame(bus *Bus, done <-chan struct{}) error {
 		default:
 		}
 	}
+}
+
+func sdlRemoteCommand(event []byte) (byte, bool) {
+	if len(event) < 24 || binary.LittleEndian.Uint32(event[:4]) != sdlKeyDownEvent || event[13] != 0 {
+		return 0, false
+	}
+	if binary.LittleEndian.Uint32(event[20:24]) == sdlKeyF1 {
+		return 0x2E, true
+	}
+	return 0, false
 }
 
 func (f *stableVideoFrame) update(frame []byte, now time.Time) []byte {

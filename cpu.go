@@ -926,6 +926,12 @@ func (c *CPU) waitForInterrupt() {
 				cycles = delta
 			}
 		}
+		if len(a.IRPending) != 0 && a.IRStatCntl&1 != 0 && a.IRSample != 0 && a.Cycles < a.IRNextAt {
+			delta := a.IRNextAt - a.Cycles
+			if cycles == 0 || delta < cycles {
+				cycles = delta
+			}
+		}
 	}
 	if cycles != 0 {
 		oldSteps := c.Steps
