@@ -917,6 +917,7 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 }
 
 func (b *Bus) Tick(cycles uint64) {
+	b.Asic.Tick(cycles)
 	if b.Asic.IRStatCntl&1 != 0 && b.Asic.IRSample != 0 {
 		select {
 		case command := <-b.IRInput:
@@ -924,7 +925,6 @@ func (b *Bus) Tick(cycles uint64) {
 		default:
 		}
 	}
-	b.Asic.Tick(cycles)
 	b.pollModemLink()
 	b.releaseModemRX()
 	if b.ModemReadyAt != 0 && b.Asic.Cycles >= b.ModemReadyAt {

@@ -99,3 +99,14 @@ func TestBusRetainsPowerUntilIRReceiverEnabled(t *testing.T) {
 		t.Fatal("initialized receiver did not accept pending Power input")
 	}
 }
+
+func TestBusPowerArrivalDoesNotOverflowDuringWait(t *testing.T) {
+	bus := NewBus()
+	bus.Asic.Write(0x4020, 1185)
+	bus.Asic.Write(0x402C, 0x3083)
+	bus.IRInput <- 0x2E
+	bus.Tick(10000000)
+	if bus.Asic.IRCount != 0 || len(bus.Asic.IRPending) != 127 || bus.Asic.IRNextAt != 11185000 {
+		t.Fatal("new input was scheduled before the elapsed WAIT interval")
+	}
+}
