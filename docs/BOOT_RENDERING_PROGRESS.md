@@ -1,5 +1,13 @@
 # Boot And Rendering Progress
 
+## Viewer Capture And Startup Cost (2026-10-07)
+
+- A report stopping at the calibration diagnostic was checked with a six-million-step `go run .`: execution advanced into the ROM decompressor at `PC=0x9FC030E4`, so that console line is not a terminal condition.
+- The main execution loop performed nine `WEBTV_TRACE_VIDEO` environment lookups and one gate-trace lookup per instruction. It now reuses the existing bus flag and caches the remaining trace setting before the loop; guest instruction and device behavior are unchanged.
+- The viewer initially shared its presented-buffer backing array with the splash reference. Presenting guest pixels then overwrote that reference, making the capture's splash comparison permanently equal. The initial presented buffer is now independent, with a regression test preserving the original splash bytes.
+- The corrected live viewer completed a 180-million-step run, decoded Power through the real IR path, and submitted the authentic Connecting page. `Captured presented video frame VID_CSTART=0x8000B740` appears in `.tmp/viewer-fix-20261007.log`; the fresh `captures/live_video_frame_yuy2.png` shows the update-check text, `Preparing to call`, and progress bar. It was visually inspected and is no longer the September capture.
+- `go test ./... -count=1` passes. This verifies the requested loading page and viewer submission, not dialing, PPP, or service connectivity.
+
 ## Decoded Browser Findings (2026-10-07)
 
 - The boot ROM decompresses its browser from file offset `0x32EC` to guest address `0x80200000`, producing `0x1C0000` bytes. The extracted image has SHA-256 `9dd56fc13893d57dde53e84a19bfc50b1dc4f6619e1069b7995ceabb26597505` and matches all 9,472 bytes of the saved `0x802C7000` runtime dump. Import this decoded image at `0x80200000`; the raw boot ROM does not directly contain these executable instructions.
