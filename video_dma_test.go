@@ -58,3 +58,71 @@ func TestSoloASICVideoDMARequiresControl(t *testing.T) {
 		t.Fatalf("video frame allocated while DMA disabled")
 	}
 }
+func TestSoloASICVideoDMAInterlaceDoesNotReplaceNextValid(t *testing.T) {
+	a := NewSoloASIC()
+	a.VideoMemoryRead = func(uint32, []byte) bool { t.Fatal("interlace bit started DMA without NV"); return false }
+	a.Write(0x300C, 0x80000120)
+	a.Write(0x3010, 64)
+	a.Write(0x3014, 0x0C)
+	if a.VideoDMAActive || a.Read(0x3000) != 0 || a.Read(0x3004) != 0 || len(a.VideoFrame) != 0 || a.Read(0x3014) != 0x0C {
+		t.Fatal("DMA started with interlace and DMAEN but no NV")
+	}
+}
+func TestSoloASICVideoDMAConsumesNVAndKeepsActiveSnapshot(t *testing.T) {
+	for _, start := range []uint32{0, 0x80000120} {
+		a := NewSoloASIC()
+		reads := 0
+		pixel := byte(0x55)
+		a.VideoMemoryRead = func(addr uint32, dst []byte) bool {
+			if addr != start&GLOBAL_MASK {
+				t.Fatalf("active DMA address=%X, want %X", addr, start&GLOBAL_MASK)
+			}
+			reads++
+			dst[0] = pixel
+			return true
+		}
+		a.Write(0x300C, start)
+		a.Write(0x3010, 64)
+		a.Write(0x3014, 0x06)
+		if !a.VideoDMAActive || a.Read(0x3014) != 0x04 || a.Read(0x3000) != start || a.Read(0x3004) != 64 || a.Read(0x3008) != 0 || reads != 1 || a.VideoFrame[0] != pixel {
+			t.Fatalf("initial transaction did not consume NV and remain active at %X", start)
+		}
+		pixel = 0xAA
+		if !a.RefreshVideoDMA() || reads != 2 || a.VideoFrame[0] != pixel || a.Read(0x3014) != 0x04 {
+			t.Fatal("consumed NV stopped the active DMA snapshot")
+		}
+		a.Write(0x300C, 0x80000200)
+		a.Write(0x3010, 128)
+		a.Write(0x3014, 0x06)
+		if a.Read(0x3000) != start || a.Read(0x3004) != 64 || a.Read(0x3014) != 0x06 {
+			t.Fatal("pending next transaction replaced the active transaction")
+		}
+		a.Write(0x3014, 0)
+		if a.VideoDMAActive || a.Read(0x3000) != 0 || a.Read(0x3004) != 0 || a.Read(0x3008) != 0 || len(a.VideoFrame) != 0 || a.RefreshVideoDMA() {
+			t.Fatal("DMAEN disable did not reset the active transaction")
+		}
+	}
+}
+func TestSoloASICVideoDMANVFAndVSYNCResetControlReadback(t *testing.T) {
+	for _, control := range []uint32{0x07, 0x17} {
+		a := NewSoloASIC()
+		a.VideoMemoryRead = func(uint32, []byte) bool { return true }
+		a.Write(0x300C, 0x80000120)
+		a.Write(0x3010, 64)
+		if a.Read(0x3014) != 0 {
+			t.Fatal("DMA control was not reset")
+		}
+		a.Write(0x3014, control)
+		if !a.VideoDMAActive || a.Read(0x3014) != control || !a.RefreshVideoDMA() {
+			t.Fatalf("NVF did not retain NV or control bits: %X", control)
+		}
+		a.Write(0x3014, 0x10)
+		if a.Read(0x3014) != 0x10 || a.VideoDMAActive || len(a.VideoFrame) != 0 {
+			t.Fatal("VSYNCRESET readback or DMAEN disable was incorrect")
+		}
+		a.Write(0x3014, 0)
+		if a.Read(0x3014) != 0 {
+			t.Fatal("DMA control did not clear")
+		}
+	}
+}

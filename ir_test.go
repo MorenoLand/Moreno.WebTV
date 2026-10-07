@@ -79,8 +79,8 @@ func TestIRThresholdMasksAndStickyInterrupt(t *testing.T) {
 		t.Fatal("threshold IRQ did not respect disabled device mask")
 	}
 	a.Write(0x007C, 4)
-	if a.BusIntStat&BUS_INT_DEVICE == 0 || a.PendingIP2() {
-		t.Fatal("device IRQ did not respect disabled bus mask")
+	if a.BusIntStat&BUS_INT_DEVICE == 0 || !a.PendingIP2() {
+		t.Fatal("firmware device enable did not assert IP2 independently of bus mask")
 	}
 	a.Write(0x000C, BUS_INT_DEVICE)
 	if !a.PendingIP2() {
@@ -211,5 +211,62 @@ func TestCPUWaitStopsAtIRTransitionDeadline(t *testing.T) {
 	}
 	if cpu.COP0[Cause]&0x8000 != 0 || a.VIDIntStat != 0 {
 		t.Fatal("WAIT skipped to a later timer or video event")
+	}
+}
+func TestIRFirmwareDeviceEnableRoutesIP2WithTimerOnlyBusMask(t *testing.T) {
+	bus := NewBus()
+	cpu := NewCPU(bus)
+	bus.CPU = cpu
+	a := bus.Asic
+	a.Write(0x000C, BUS_INT_TIMER)
+	a.Write(0x4020, 0x4DD)
+	a.Write(0x4024, 10)
+	a.Write(0x402C, 0x3083)
+	a.QueueIRTransitions([]uint16{40, 40, 40, 40, 40, 40, 40, 40})
+	a.Tick(8 * 40 * 1245)
+	if a.PendingIP2() {
+		t.Fatal("disabled DEV source asserted IP2")
+	}
+	a.Write(0x007C, 4)
+	if a.BusIntEnable != BUS_INT_TIMER || a.BusIntStat&BUS_INT_DEVICE == 0 || !a.PendingIP2() {
+		t.Fatalf("firmware IRQ routing failed: busEn=%X busStat=%X devEn=%X devStat=%X", a.BusIntEnable, a.BusIntStat, a.DevIntEnable, a.DevIntStat)
+	}
+	cpu.COP0[Status] = 0x401
+	if !cpu.checkInterrupts() || cpu.COP0[Cause]&0x400 == 0 {
+		t.Fatal("firmware DEV enable did not reach CPU IP2")
+	}
+	for i := 0; i < 8; i++ {
+		a.Read(0x4028)
+	}
+	a.Write(0x0174, 4)
+	if a.PendingIP2() || a.BusIntStat&BUS_INT_DEVICE != 0 {
+		t.Fatal("drain and DEV acknowledge retained IP2")
+	}
+}
+func TestDEVInterruptRegisterAddressesAndMaskedStatus(t *testing.T) {
+	a := NewSoloASIC()
+	a.Write(0x0078, 0x44)
+	if a.Read(0x0074) != 0 || a.Read(0x0078) != 0x44 || a.PendingIP2() {
+		t.Fatal("disabled DEV status was not masked at 0074 or preserved raw at 0078")
+	}
+	a.Write(0x007C, 4)
+	if a.Read(0x0074) != 4 || a.Read(0x0078) != 0x44 || a.Read(0x007C) != 4 || !a.PendingIP2() {
+		t.Fatal("007C enable did not expose IRQ 1D mask at 0074")
+	}
+	a.Write(0x017C, 4)
+	if a.Read(0x0074) != 0 || a.Read(0x0078) != 0x44 || a.PendingIP2() {
+		t.Fatal("017C disable cleared raw status or retained masked IRQ")
+	}
+	a.Write(0x007C, 0x40)
+	a.Write(0x0174, 4)
+	if a.Read(0x0074) != 0x40 || a.Read(0x0078) != 0x40 || !a.PendingIP2() {
+		t.Fatal("0174 acknowledge cleared a different pending source")
+	}
+	a.Write(0x0174, 0x40)
+	if a.Read(0x0074) != 0 || a.Read(0x0078) != 0 || a.PendingIP2() {
+		t.Fatal("0174 acknowledge did not clear DEV status")
+	}
+	if a.UnmodeledReadHits[0x0074] != 0 || a.UnmodeledWriteHits[0x0078] != 0 {
+		t.Fatal("DEV interrupt register accesses were unmodeled")
 	}
 }

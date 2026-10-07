@@ -37,6 +37,7 @@ type SoloASIC struct {
 	VIDNStart       uint32
 	VIDNSize        uint32
 	VIDDMACntl      uint32
+	VideoDMAActive  bool
 	VideoFrame      []byte
 	VideoMemoryRead func(uint32, []byte) bool
 	VideoDMAReads   uint64
@@ -135,8 +136,9 @@ const videoFramePeriodCycles = 2783333
 const irInterruptMask = 1 << 2
 
 const (
-	videoDMAEnable    = 1 << 2
-	videoDMANextValid = 1 << 3
+	videoDMAEnable           = 1 << 2
+	videoDMANextValid        = 1 << 1
+	videoDMANextValidForever = 1 << 0
 )
 
 func NewSoloASIC() *SoloASIC {
@@ -215,7 +217,9 @@ func (a *SoloASIC) Read(off uint32) uint32 {
 		return a.AUDIntStat
 	case 0x0070, 0x0170:
 		return a.AUDIntEnable
-	case 0x0074, 0x0078, 0x0174:
+	case 0x0074:
+		return a.DevIntStat & a.DevIntEnable
+	case 0x0078, 0x0174:
 		return a.DevIntStat
 	case 0x007C, 0x017C:
 		return a.DevIntEnable
@@ -605,14 +609,19 @@ func (a *SoloASIC) Write(off, data uint32) {
 	case 0x3014:
 		a.VIDDMACntl = data
 		if a.VIDDMACntl&videoDMAEnable == 0 {
+			a.VideoDMAActive = false
 			a.VIDCStart = 0
 			a.VIDCSize = 0
 			a.VIDCCnt = 0
 			a.VideoFrame = nil
-		} else if a.VIDDMACntl&videoDMANextValid != 0 && a.VIDCStart == 0 {
+		} else if a.VIDDMACntl&videoDMANextValid != 0 && !a.VideoDMAActive {
 			a.VIDCStart = a.VIDNStart
 			a.VIDCSize = a.VIDNSize
 			a.VIDCCnt = 0
+			a.VideoDMAActive = true
+			if a.VIDDMACntl&videoDMANextValidForever == 0 {
+				a.VIDDMACntl &^= videoDMANextValid
+			}
 		}
 		a.RefreshVideoDMA()
 	default:
@@ -739,7 +748,7 @@ func (a *SoloASIC) i2cBitBang(oldSCL, newSCL, oldSDA, newSDA uint8) {
 
 func (a *SoloASIC) RefreshVideoDMA() bool {
 	base := a.VIDCStart & GLOBAL_MASK
-	if a.VideoMemoryRead == nil || base == 0 || a.VIDCSize == 0 || a.VIDDMACntl&videoDMAEnable == 0 || a.VIDDMACntl&videoDMANextValid == 0 || a.VIDCSize > RAM_SIZE {
+	if a.VideoMemoryRead == nil || !a.VideoDMAActive || a.VIDCSize == 0 || a.VIDDMACntl&videoDMAEnable == 0 || a.VIDCSize > RAM_SIZE {
 		return false
 	}
 	if len(a.VideoFrame) != int(a.VIDCSize) {
@@ -847,6 +856,9 @@ func (a *SoloASIC) PendingIP2() bool {
 		return true
 	}
 	if a.RIOIntStat&a.RIOIntEnable != 0 {
+		return true
+	}
+	if a.DevIntStat&a.DevIntEnable != 0 {
 		return true
 	}
 	if a.BusIntStat&a.BusIntEnable != 0 {

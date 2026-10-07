@@ -201,6 +201,9 @@ func main() {
 					bus.Asic.QueueIRTransitions(remoteIRTransitions(0x2E))
 					fmt.Printf("Remote Power input step=%d\n", step)
 				}
+				if powerAtStep > 0 && step >= powerAtStep && (step-powerAtStep)%1000000 == 0 {
+					fmt.Printf("IR Power state step=%d PC=0x%08X sample=%d control=0x%X FIFO=%d pending=%d reads=%d devStat=0x%X devEn=0x%X busEn=0x%X flags=%02X pulseIn=%d pulseOut=%d keyIn=%d keyOut=%d power=%02X busy=%02X\n", step, cpu.PC, bus.Asic.IRSample, bus.Asic.IRStatCntl, bus.Asic.IRCount, len(bus.Asic.IRPending), bus.Asic.ReadHits[0x4028], bus.Asic.DevIntStat, bus.Asic.DevIntEnable, bus.Asic.BusIntEnable, bus.RAM[0x1308], binary.BigEndian.Uint32(bus.RAM[0x13B8:]), binary.BigEndian.Uint32(bus.RAM[0x13BC:]), binary.BigEndian.Uint32(bus.RAM[0x13A8:]), binary.BigEndian.Uint32(bus.RAM[0x13AC:]), bus.RAM[0x224E], bus.RAM[0x2240])
+				}
 				if os.Getenv("WEBTV_TRACE_VIDEO") == "1" && cpu.PC >= 0x8022BCB0 && cpu.PC < 0x8022BD30 && framebufferCallerHits < 128 {
 					framebufferCallerHits++
 					fmt.Printf("framebuffer caller #%d step=%d PC=0x%08X inst=0x%08X a0=0x%016X a1=0x%016X a2=0x%016X a3=0x%016X v0=0x%016X v1=0x%016X s0=0x%016X s1=0x%016X s2=0x%016X ra=0x%016X VID_NSTART=0x%08X\n", framebufferCallerHits, step, cpu.PC, bus.Read32(cpu.PC), cpu.Regs[4], cpu.Regs[5], cpu.Regs[6], cpu.Regs[7], cpu.Regs[2], cpu.Regs[3], cpu.Regs[16], cpu.Regs[17], cpu.Regs[18], cpu.Regs[31], bus.Asic.VIDNStart)
