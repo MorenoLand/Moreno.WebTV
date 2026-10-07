@@ -12,7 +12,7 @@ The gold logo displayed immediately on launch is decoded from the ROM but presen
 
 - Repository: MorenoLand/Moreno.WebTV; branch main.
 - The existing origin URL names Denveous/Moreno.WebTV and GitHub redirects it to MorenoLand/Moreno.WebTV.
-- Current verified code milestone: 778f8b0; this handoff is being published with the completed milestones.
+- Verified boot/viewer milestone: 778f8b0; latest UART source milestone: 58d7efb. The completed continuation pass and current response boundary are recorded below.
 - Commits must be GPG-signed. Use the workstation signing runbook, never disable signing, amend, or invent empty progress commits.
 - Do not publish ROMs, disk images, captures, decoded binaries, or other ROM-derived artifacts. They remain ignored.
 - Do not modify CI/workflows unless explicitly requested. Preserve other agents' and the user's changes.
