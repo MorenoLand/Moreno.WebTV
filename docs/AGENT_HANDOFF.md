@@ -137,3 +137,24 @@ Trace the actual post-Power Preparing to call state and first outbound Hayes tra
 
 Do not revive the obsolete timer signature or adapter-type theories. Do not force an ATD, guest event, packet queue pointer, clock, or page. Implement one original-firmware/spec-backed device correction at a time; verify through go run and real guest pixels, then sign and publish meaningful milestones when authorized.
 
+## Completed UART continuation pass (2026-10-07)
+
+Signed source milestone: 58d7efb, following published handoff d1c2658.
+
+The first post-Power modem command now reaches the hardware TX register through the original guest ISR, not an injected string. The 400M-step run recorded exactly two downloader LF bytes followed by:
+
+~~~text
+ATS38=0S30=180S95=36S11=60&D2V1E0L3&Q5&K3\r
+~~~
+
+The reconstructed trace was asserted byte-for-byte against the original ROM command. Evidence is .tmp/uart-ready-long-20261007.log; final counters were 44 transmitted data bytes, MCR 0x0B, and MSR 0xB0. The earlier 220M run stopped during the legitimate first DTR-low delay, not a frozen clock.
+
+Changes: bus.go now reads MCR back at offset 0x10, reports both THRE and TEMT when the existing instantaneous transmitter is empty, latches transmit-empty interrupts, identifies TX as IIR 0x02 behind RX and ahead of modem status, acknowledges that UART source on IIR read, and preserves sticky SOLO RIO status until its separate acknowledgment. IER enable and subsequent completed writes rearm TX. Tests in modem_uart_test.go cover DTR read-modify-write, CTS restoration, TX acknowledgment/priority/masking, and divisor-latch isolation. The old idle-LSR test now expects 0x60. Timing and a real TX FIFO remain outside this correction.
+
+[TI's PC16550D register specification](https://www.mouser.com/datasheet/2/405/pc16550d-443503.pdf), sections 8.6.3 through 8.6.7, supplies the UART status and interrupt semantics; this manufacturer document is hosted by its distributor.
+
+Original firmware detail: native builtin_winkdtr is 0x8024C46C. Its wrapper reaches 0x8020C450, which reads BE000010 and changes only DTR; intended control sequence is 0B -> 0A -> 0B. Zero readback previously lost RTS/OUT2. The low and high portions each wait 30 guest ticks through 0x8024BBC0. Tick accessor 0x8030AD78 reads 0x80002730; callback 0x8022C2CC increments it. At the 220M cutoff, only about 24 tick periods had elapsed since lowering DTR.
+
+Queued sendstr reaches 0x8020C590: TX buffer 0x800010C4, producer 0x10D4, consumer 0x10D8. IIR 0x02 selects 0x802216F4 via table slot 0x80221844. That handler requires MSR CTS bit 0x10 and writes bytes at 0x80221750, disabling TX interrupts when its software ring empties.
+
+Remaining boundary: ConfigureModem waits for OK after the first configuration, then a phone-setting-dependent ATV0 command and numeric result 0 before dial-prefix/number submission. A later successful dial result leads to ATD and Waiting for answer. The local model does not yet interpret normal post-download Hayes commands or supply genuine call-state responses; no OK/CONNECT result was fabricated in this pass. Premature DCD assertion from MCR readiness and the old no-carrier diagnostic remain unresolved model limitations. A future pass must implement or connect an evidenced modem command/call lifecycle, not revive missing-Power theories or inject guest events.
