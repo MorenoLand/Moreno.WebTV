@@ -103,16 +103,14 @@ func showVideoFrame(bus *Bus, done <-chan struct{}) error {
 	defer s.destroyTexture(texture)
 	frames := stableVideoFrame{presented: splash}
 	captured := false
+	lastCapture := time.Time{}
 	event := [56]byte{}
 	for {
 		data := frames.presented
+		capturePresented := false
 		if frame, ok := videoFrameBytes(bus); ok {
-			if os.Getenv("WEBTV_CAPTURE_VIDEO") == "1" && !captured && videoFramePresentable(frame) {
-				captured = true
-				writeYUY2PNG(append([]byte(nil), frame...), videoWidth, videoHeight, "live_video_frame_yuy2.png")
-				fmt.Printf("Captured presentable video frame VID_NSTART=0x%08X\n", bus.Asic.VIDNStart)
-			}
 			data = frames.update(frame, time.Now())
+			capturePresented = bytes.Equal(data, frame) && !bytes.Equal(data, splash)
 		}
 		if s.updateTexture(texture, nil, unsafe.Pointer(unsafe.SliceData(data)), videoWidth*2) != 0 {
 			return fmt.Errorf("SDL_UpdateTexture: %s", s.errorString())
@@ -121,6 +119,14 @@ func showVideoFrame(bus *Bus, done <-chan struct{}) error {
 			return fmt.Errorf("SDL_RenderCopy: %s", s.errorString())
 		}
 		s.renderPresent(renderer)
+		if os.Getenv("WEBTV_CAPTURE_VIDEO") == "1" && capturePresented && time.Since(lastCapture) >= time.Second {
+			lastCapture = time.Now()
+			writeYUY2PNG(append([]byte(nil), data...), videoWidth, videoHeight, "live_video_frame_yuy2.png")
+			if !captured {
+				captured = true
+				fmt.Printf("Captured presented video frame VID_CSTART=0x%08X\n", bus.Asic.VIDCStart)
+			}
+		}
 		if s.waitEventTimeout(unsafe.Pointer(&event[0]), 16) != 0 {
 			if binary.LittleEndian.Uint32(event[:4]) == sdlQuitEvent {
 				return nil
@@ -156,10 +162,11 @@ func (f *stableVideoFrame) update(frame []byte, now time.Time) []byte {
 		f.since = now
 		return f.presented
 	}
-	if !bytes.Equal(frame, f.candidate) {
-		f.candidate = append(f.candidate[:0], frame...)
+	if len(f.candidate) == 0 {
 		f.since = now
-	} else if now.Sub(f.since) >= videoStableDuration && !bytes.Equal(f.presented, f.candidate) {
+	}
+	f.candidate = append(f.candidate[:0], frame...)
+	if now.Sub(f.since) >= videoStableDuration && !bytes.Equal(f.presented, f.candidate) {
 		f.presented = append(f.presented[:0], f.candidate...)
 	}
 	return f.presented

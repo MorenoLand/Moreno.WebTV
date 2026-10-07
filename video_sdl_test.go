@@ -39,7 +39,7 @@ func TestVideoGeometryMatchesFirmwareFrameSize(t *testing.T) {
 	}
 }
 
-func TestStableVideoFrameWaitsForCompletedRedraw(t *testing.T) {
+func TestStableVideoFrameAcceptsChangingValidScanout(t *testing.T) {
 	splash := []byte{16, 128, 16, 128}
 	frames := stableVideoFrame{presented: splash}
 	start := time.Unix(0, 0)
@@ -48,11 +48,28 @@ func TestStableVideoFrameWaitsForCompletedRedraw(t *testing.T) {
 	if got := frames.update(partial, start); !bytes.Equal(got, splash) {
 		t.Fatalf("partial redraw was presented: %v", got)
 	}
-	if got := frames.update(complete, start.Add(videoStableDuration)); !bytes.Equal(got, splash) {
-		t.Fatalf("changing redraw was presented: %v", got)
+	if got := frames.update(complete, start.Add(videoStableDuration)); !bytes.Equal(got, complete) {
+		t.Fatalf("changing valid scanout was withheld: %v", got)
 	}
 	if got := frames.update(complete, start.Add(2*videoStableDuration)); !bytes.Equal(got, complete) {
 		t.Fatalf("stable redraw was not presented: %v", got)
+	}
+}
+
+func TestStableVideoFramePresentsFiftyMillisecondAnimation(t *testing.T) {
+	splash := []byte{16, 128, 16, 128}
+	frames := stableVideoFrame{presented: splash}
+	start := time.Unix(0, 0)
+	for step := 0; step <= 12; step++ {
+		frame := []byte{byte(32 + step), 128, byte(32 + step), 128}
+		got := frames.update(frame, start.Add(time.Duration(step)*50*time.Millisecond))
+		want := frame
+		if step < 3 {
+			want = splash
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("animation step %d displayed %v, want %v", step, got, want)
+		}
 	}
 }
 
