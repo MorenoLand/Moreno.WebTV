@@ -917,10 +917,12 @@ func (b *Bus) modemWrite(off, val, width uint32) {
 }
 
 func (b *Bus) Tick(cycles uint64) {
-	select {
-	case command := <-b.IRInput:
-		b.Asic.QueueIRTransitions(remoteIRTransitions(command))
-	default:
+	if b.Asic.IRStatCntl&1 != 0 && b.Asic.IRSample != 0 {
+		select {
+		case command := <-b.IRInput:
+			b.Asic.QueueIRTransitions(remoteIRTransitions(command))
+		default:
+		}
 	}
 	b.Asic.Tick(cycles)
 	b.pollModemLink()

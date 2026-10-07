@@ -84,3 +84,18 @@ func TestRemotePowerFramesReachThresholdInterrupt(t *testing.T) {
 		}
 	}
 }
+
+func TestBusRetainsPowerUntilIRReceiverEnabled(t *testing.T) {
+	bus := NewBus()
+	bus.IRInput <- 0x2E
+	bus.Tick(1)
+	if len(bus.IRInput) != 1 || len(bus.Asic.IRPending) != 0 {
+		t.Fatal("Power input was consumed before receiver initialization")
+	}
+	bus.Asic.Write(0x4020, 1185)
+	bus.Asic.Write(0x402C, 0x3083)
+	bus.Tick(1)
+	if len(bus.IRInput) != 0 || len(bus.Asic.IRPending) != 127 {
+		t.Fatal("initialized receiver did not accept pending Power input")
+	}
+}
