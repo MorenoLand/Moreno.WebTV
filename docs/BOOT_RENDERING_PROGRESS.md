@@ -1,5 +1,14 @@
 # Boot And Rendering Progress
 
+## Decoded Browser Findings (2026-10-07)
+
+- The boot ROM decompresses its browser from file offset `0x32EC` to guest address `0x80200000`, producing `0x1C0000` bytes. The extracted image has SHA-256 `9dd56fc13893d57dde53e84a19bfc50b1dc4f6619e1069b7995ceabb26597505` and matches all 9,472 bytes of the saved `0x802C7000` runtime dump. Import this decoded image at `0x80200000`; the raw boot ROM does not directly contain these executable instructions.
+- Startup decompresses initialized data from `0x8034ACB0` into `0x80001000..0x80003BAF`, then clears BSS at `0x80003BB0..0x8000B19F`. The raw bootloader deliberately skips physical `0x400..0x7FF` during its sentinel fill.
+- The previous interpretation of physical `0x588` as an external modem status or direct event-2 producer is incorrect. Routine `0x802C5B00` schedules either of two deadlines at object offsets `0x18C/0x190`, advances past deadlines by `0x15180` (86,400) seconds, and writes the `0x7661` tag itself. Routine `0x802C5E84` compares those deadlines with the clock and emits event code `0x2000` with selector `1` or `2`; the selector is not boot event key `2`. Zero retained timer state is not evidence of a missing modem/peer response.
+- Routine `0x802C6C04` accepts event code `0x8006` while `0x8000224E` is zero and calls `0x802C7464(0)`. That routine sets the gate, enables presentation, and selects the connection mode. The hardware input encoding that produces `0x8006` is still being traced; directly patching the gate or injecting a guest event is not a hardware fix.
+- The list lookup at `0x802C6828` remains a separate question: `0x80229BE8` searches a linked list by its node key. It does not wait on the timer events emitted by `0x802C5E84`. Its exact list role must be established before describing key `2` as a missing network event.
+- `video_sdl.go` currently handles only SDL quit events. No keyboard or remote input reaches the guest. The authentic Connecting screen is still not visually verified; the findings above supersede the external-status/event-2 interpretations in the older trace notes below.
+
 ## Confirmed Image Layout
 
 - The app build header reports load address `0x804E0000` and ROMFS address `0x80800000`.
